@@ -2,6 +2,7 @@
 
 #include <spglib.h>
 
+#include <array>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -158,7 +159,8 @@ std::optional<POSCAR> makeConventionalCell(const POSCAR& poscar, const double& s
         poscarDirect.toDirect();
     }
 
-    int num_atoms = static_cast<int>(poscarDirect.total_atoms);
+    int num_atoms_in = static_cast<int>(poscarDirect.total_atoms);
+    int num_atoms{num_atoms_in * 32};
 
     // 2) Prepare C‑arrays for spg_find_primitive
     double lattice[3][3];
@@ -166,14 +168,14 @@ std::optional<POSCAR> makeConventionalCell(const POSCAR& poscar, const double& s
         for (int j = 0; j < 3; ++j)
             lattice[i][j] = poscarDirect.lattice[i][j];
 
-    double positions[num_atoms][3];
-    for (int i = 0; i < num_atoms; ++i) {
+    std::vector<std::array<double, 3>> positions(num_atoms);
+    std::vector<int> types(num_atoms);
+    for (int i = 0; i < num_atoms_in; ++i) {
         positions[i][0] = poscarDirect.coordinates[i].x;
         positions[i][1] = poscarDirect.coordinates[i].y;
         positions[i][2] = poscarDirect.coordinates[i].z;
     }
 
-    int types[num_atoms];
     int type_counter = 1;
     std::map<std::string, int> element_map;
     for (size_t i = 0, idx = 0; i < poscarDirect.elements.size(); ++i) {
@@ -194,7 +196,8 @@ std::optional<POSCAR> makeConventionalCell(const POSCAR& poscar, const double& s
     }
 
     // 3) Call spglib standardization
-    int num_std = spg_standardize_cell(lattice, positions, types, num_atoms, 0, 1, symprec);
+    int num_std =
+        spg_standardize_cell(lattice, (double(*)[3])positions.data(), types.data(), num_atoms_in, 0, 1, symprec);
 
     if (num_std <= 0) {
         return std::nullopt;
