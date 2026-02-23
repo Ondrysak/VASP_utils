@@ -10,7 +10,8 @@
 #include "poscar_file.h"
 #include "symmetry.h"
 
-bool readInput(int argc, char* argv[], std::string& inputFile, std::string& outputFile, double& symprec) {
+bool readInput(int argc, char* argv[], std::string& inputFile, std::string& outputFile, double& symprec,
+               int& idealize) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
 
@@ -33,6 +34,8 @@ bool readInput(int argc, char* argv[], std::string& inputFile, std::string& outp
             } catch (...) {
                 return false;
             }
+        } else if (arg == "--idealize") {
+            idealize = 1;
         } else {
             std::cerr << "Warning: unknown argument! Ignoring it!\n";
             printHelp();
@@ -73,6 +76,7 @@ void printHelp() {
                  "  --input      input POSCAR file name (default: POSCAR)\n"
                  "  --symprec    symmetry tolerance (spglib symprec) (default: 1e-5)\n"
                  "  --output     output POSCAR file name (used with --primitive) (default: POSCAR_primitive)\n"
+                 "  --idealize   idealize the unit cell structure\n"
                  "  --help       show this help message\n\n"
                  "Example:\n"
                  "  poscar_2primitive --input POSCARin --symprec 1e-5 --outpur POSCARout\n";
@@ -82,8 +86,10 @@ int main(int argc, char* argv[]) {
     std::string inputFile{"POSCAR"};
     std::string outputFile{"POSCAR_primitive"};
     double symprec{1e-5};
+    const int primitive{1};
+    int idealize{0};
 
-    if (!readInput(argc, argv, inputFile, outputFile, symprec)) {
+    if (!readInput(argc, argv, inputFile, outputFile, symprec, idealize)) {
         return 1;
     }
 
@@ -94,7 +100,7 @@ int main(int argc, char* argv[]) {
     POSCAR poscar;
     poscar.readPOSCAR(inputFile);
 
-    auto poscar_stand = makePrimitiveCell(poscar, symprec);
+    auto poscar_stand = standardizeCell(poscar, symprec, primitive, idealize);
     if (!poscar_stand) {
         std::cerr << "Error: failed to create primitive cell POSCAR.\n";
         return 1;

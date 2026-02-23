@@ -3,7 +3,7 @@
 
 #include <string>
 
-bool readInput(int argc, char* argv[], std::string& inputFile, std::string& outputFile, double& symprec);
+bool readInput(int argc, char* argv[], std::string& inputFile, std::string& outputFile, double& symprec, int& idealize);
 bool validateInput(const std::string& inputFile, const std::string& outputFile, double& symprec);
 void printHelp();
 

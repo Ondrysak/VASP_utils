@@ -13,6 +13,33 @@
 
 #include "poscar_file.h"
 
+void initializeSpglibInput(POSCAR& poscarDirect, double lattice[3][3], std::vector<std::array<double, 3>>& positions,
+                           std::vector<int>& types, std::map<std::string, int>& element_map) {
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            lattice[i][j] = poscarDirect.lattice[i][j];
+
+    // Prepare atomic positions as flat vector (num_atoms*3)
+    for (int i = 0; i < poscarDirect.total_atoms; ++i) {
+        positions[i][0] = poscarDirect.coordinates[i].x;
+        positions[i][1] = poscarDirect.coordinates[i].y;
+        positions[i][2] = poscarDirect.coordinates[i].z;
+    }
+
+    // Prepare atomic types
+    int type_counter{1};
+    int idx{0};
+
+    for (size_t i = 0; i < poscarDirect.elements.size(); ++i) {
+        const std::string& el = poscarDirect.elements[i];
+        int n = poscarDirect.num_atoms[i];
+        if (element_map.find(el) == element_map.end())
+            element_map[el] = type_counter++;
+        for (int j = 0; j < n; ++j)
+            types[idx++] = element_map[el];
+    }
+}
+
 SpglibDatasetPtr analyzeSymmetry(const POSCAR& poscar, const double& symprec) {
     // Make a copy in fractional coordinates
     POSCAR poscarDirect = poscar;
@@ -21,138 +48,20 @@ SpglibDatasetPtr analyzeSymmetry(const POSCAR& poscar, const double& symprec) {
     }
 
     int num_atoms = static_cast<int>(poscarDirect.total_atoms);
-
-    // Prepare lattice as flat 3x3 vector
     double lattice[3][3];
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            lattice[i][j] = poscarDirect.lattice[i][j];
-
-    // Prepare atomic positions as flat vector (num_atoms*3)
-    double positions[num_atoms][3];
-    for (int i = 0; i < num_atoms; ++i) {
-        positions[i][0] = poscarDirect.coordinates[i].x;
-        positions[i][1] = poscarDirect.coordinates[i].y;
-        positions[i][2] = poscarDirect.coordinates[i].z;
-    }
-
-    // Prepare atomic types
-    int types[num_atoms];
-    int type_counter = 1;
+    std::vector<std::array<double, 3>> positions(num_atoms);
+    std::vector<int> types(num_atoms);
     std::map<std::string, int> element_map;
 
-    for (size_t i = 0, idx = 0; i < poscarDirect.elements.size(); ++i) {
-        const std::string& el = poscarDirect.elements[i];
-        int n = poscarDirect.num_atoms[i];
-        if (element_map.find(el) == element_map.end())
-            element_map[el] = type_counter++;
-        for (int j = 0; j < n; ++j)
-            types[idx++] = element_map[el];
-    }
+    initializeSpglibInput(poscarDirect, lattice, positions, types, element_map);
 
-    SpglibDataset* dataset = spg_get_dataset(lattice, positions, types, num_atoms, symprec);
+    SpglibDataset* dataset = spg_get_dataset(lattice, (double(*)[3])positions.data(), types.data(), num_atoms, symprec);
 
     return SpglibDatasetPtr(dataset, &spg_free_dataset);
 }
 
-std::optional<POSCAR> makePrimitiveCell(const POSCAR& poscar, const double& symprec) {
-    // 1) Copy and ensure fractional coordinates
-    POSCAR poscarDirect = poscar;
-    if (!poscarDirect.is_direct) {
-        poscarDirect.toDirect();
-    }
-
-    int num_atoms = static_cast<int>(poscarDirect.total_atoms);
-
-    // 2) Prepare C‑arrays for spg_find_primitive
-    double lattice[3][3];
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            lattice[i][j] = poscarDirect.lattice[i][j];
-
-    double positions[num_atoms][3];
-    for (int i = 0; i < num_atoms; ++i) {
-        positions[i][0] = poscarDirect.coordinates[i].x;
-        positions[i][1] = poscarDirect.coordinates[i].y;
-        positions[i][2] = poscarDirect.coordinates[i].z;
-    }
-
-    int types[num_atoms];
-    int type_counter = 1;
-    std::map<std::string, int> element_map;
-    for (size_t i = 0, idx = 0; i < poscarDirect.elements.size(); ++i) {
-        const std::string& el = poscarDirect.elements[i];
-        int count = poscarDirect.num_atoms[i];
-        if (element_map.find(el) == element_map.end())
-            element_map[el] = type_counter++;
-        for (int j = 0; j < count; ++j)
-            types[idx++] = element_map[el];
-    }
-
-    // Checking if empty spheres are present in input
-    for (const auto& el : poscar.elements) {
-        if (el == "X" || el == "E" || el == "V" || el == "Vac") {
-            std::cerr << "Warning: Empty sphere detected.\n"
-                      << "SPGLIB will treat them as real atoms and symmetry may change.\n";
-        }
-    }
-    // 3) Call spglib primitive finder
-    int num_prim = spg_find_primitive(lattice, positions, types, num_atoms, symprec);
-
-    if (num_prim <= 0) {
-        return std::nullopt;  // failed
-    }
-
-    // Determine maximum type index
-    int max_type = 0;
-    for (int i = 0; i < num_prim; ++i)
-        if (types[i] > max_type)
-            max_type = types[i];
-
-    // Create lookup vector (type -> element)
-    std::vector<std::string> type_to_element(max_type + 1);
-
-    // Fill from original element_map
-    for (const auto& [el, t] : element_map)
-        type_to_element[t] = el;
-
-    // 4) Build POSCAR from arrays now holding primitive cell
-    POSCAR prim;
-    prim.comment = poscar.comment + " primitive cell";
-    prim.is_direct = true;
-    prim.total_atoms = num_prim;
-
-    // Copy new lattice
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            prim.lattice[i][j] = lattice[i][j];
-
-    // Copy positions
-    prim.coordinates.resize(num_prim);
-    for (int i = 0; i < num_prim; ++i) {
-        prim.coordinates[i].x = positions[i][0];
-        prim.coordinates[i].y = positions[i][1];
-        prim.coordinates[i].z = positions[i][2];
-    }
-
-    prim.elements = poscar.elements;
-    prim.num_atoms.assign(prim.elements.size(), 0);
-
-    for (int i = 0; i < num_prim; ++i) {
-        std::string el = type_to_element[types[i]];
-
-        // Find element index in original ordering
-        for (size_t j = 0; j < prim.elements.size(); ++j) {
-            if (prim.elements[j] == el) {
-                prim.num_atoms[j]++;
-                break;
-            }
-        }
-    }
-    return prim;
-}
-
-std::optional<POSCAR> makeConventionalCell(const POSCAR& poscar, const double& symprec) {
+std::optional<POSCAR> standardizeCell(const POSCAR& poscar, const double& symprec, const int& primitive,
+                                      const int& idealize) {
     // 1) Copy and ensure fractional coordinates
     POSCAR poscarDirect = poscar;
     if (!poscarDirect.is_direct) {
@@ -160,32 +69,14 @@ std::optional<POSCAR> makeConventionalCell(const POSCAR& poscar, const double& s
     }
 
     int num_atoms_in = static_cast<int>(poscarDirect.total_atoms);
-    int num_atoms{num_atoms_in * 32};
+    int num_atoms{num_atoms_in * 64};
 
-    // 2) Prepare C‑arrays for spg_find_primitive
     double lattice[3][3];
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            lattice[i][j] = poscarDirect.lattice[i][j];
-
     std::vector<std::array<double, 3>> positions(num_atoms);
     std::vector<int> types(num_atoms);
-    for (int i = 0; i < num_atoms_in; ++i) {
-        positions[i][0] = poscarDirect.coordinates[i].x;
-        positions[i][1] = poscarDirect.coordinates[i].y;
-        positions[i][2] = poscarDirect.coordinates[i].z;
-    }
-
-    int type_counter = 1;
     std::map<std::string, int> element_map;
-    for (size_t i = 0, idx = 0; i < poscarDirect.elements.size(); ++i) {
-        const std::string& el = poscarDirect.elements[i];
-        int count = poscarDirect.num_atoms[i];
-        if (element_map.find(el) == element_map.end())
-            element_map[el] = type_counter++;
-        for (int j = 0; j < count; ++j)
-            types[idx++] = element_map[el];
-    }
+
+    initializeSpglibInput(poscarDirect, lattice, positions, types, element_map);
 
     // Checking if empty spheres are present in input
     for (const auto& el : poscar.elements) {
@@ -196,8 +87,8 @@ std::optional<POSCAR> makeConventionalCell(const POSCAR& poscar, const double& s
     }
 
     // 3) Call spglib standardization
-    int num_std =
-        spg_standardize_cell(lattice, (double(*)[3])positions.data(), types.data(), num_atoms_in, 0, 1, symprec);
+    int num_std = spg_standardize_cell(lattice, (double(*)[3])positions.data(), types.data(), num_atoms_in, primitive,
+                                       idealize, symprec);
 
     if (num_std <= 0) {
         return std::nullopt;
@@ -213,14 +104,16 @@ std::optional<POSCAR> makeConventionalCell(const POSCAR& poscar, const double& s
     std::vector<std::string> type_to_element(max_type + 1);
 
     // Fill from original element_map
-    for (const auto& [el, t] : element_map)
-        type_to_element[t] = el;
+    for (const auto& [el, t] : element_map) {
+        if (t <= max_type)
+            type_to_element[t] = el;
+    }
 
     // 4) Build POSCAR from arrays now holding primitive cell
     POSCAR std_poscar;
-    std_poscar.comment = poscar.comment + " conventional cell";
     std_poscar.is_direct = true;
     std_poscar.total_atoms = num_std;
+    std_poscar.comment = poscar.comment + (primitive == 1 ? " primitive cell" : " conventional cell");
 
     // Copy new lattice
     for (int i = 0; i < 3; ++i)
@@ -228,25 +121,30 @@ std::optional<POSCAR> makeConventionalCell(const POSCAR& poscar, const double& s
             std_poscar.lattice[i][j] = lattice[i][j];
 
     // Copy positions
-    std_poscar.coordinates.resize(num_std);
-    for (int i = 0; i < num_std; ++i) {
-        std_poscar.coordinates[i].x = positions[i][0];
-        std_poscar.coordinates[i].y = positions[i][1];
-        std_poscar.coordinates[i].z = positions[i][2];
-    }
+    std_poscar.elements.clear();
+    std_poscar.num_atoms.clear();
+    std_poscar.coordinates.clear();
 
-    std_poscar.elements = poscar.elements;
-    std_poscar.num_atoms.assign(std_poscar.elements.size(), 0);
+    // Adding atomic coordinates to kepp the elemet order as well as correct assignment of atomic position to each
+    // element
+    for (const auto& original_el : poscar.elements) {
+        int count_for_this_el = 0;
 
-    for (int i = 0; i < num_std; ++i) {
-        std::string el = type_to_element[types[i]];
-
-        // Find element index in original ordering
-        for (size_t j = 0; j < std_poscar.elements.size(); ++j) {
-            if (std_poscar.elements[j] == el) {
-                std_poscar.num_atoms[j]++;
-                break;
+        for (int i = 0; i < num_std; ++i) {
+            if (type_to_element[types[i]] == original_el) {
+                Atom a;
+                a.x = positions[i][0];
+                a.y = positions[i][1];
+                a.z = positions[i][2];
+                std_poscar.coordinates.push_back(a);
+                count_for_this_el++;
             }
+        }
+
+        // Pokud prvek v nové struktuře existuje, přidáme ho do hlavičky
+        if (count_for_this_el > 0) {
+            std_poscar.elements.push_back(original_el);
+            std_poscar.num_atoms.push_back(count_for_this_el);
         }
     }
     return std_poscar;
