@@ -200,7 +200,11 @@ int main(int argc, char* argv[]) {
         std::string filenameOut = "POSCAR_modified" + std::to_string(j + 1);
 
         output.displaceAtoms(n_atoms, amplitude);
-        output.writePOSCAR(filenameOut);
+
+        if (!output.writePOSCAR(filenameOut)) {
+            std::cerr << "Error: failed to write conventional cell POSCAR file to " << outputFile << "\n";
+            return 1;
+        }
     }
 
     /*

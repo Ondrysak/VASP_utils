@@ -25,6 +25,7 @@ struct POSCAR {
     void toDirect();
     void toCartesian();
     bool writeCtrlsFile(const std::string& filenameOut);
+    POSCAR makeSupercell(const double S[9]);
 
 private:
     bool readPOSCARHeader(const std::string& filename);

@@ -98,7 +98,11 @@ int main(int argc, char* argv[]) {
     }
 
     POSCAR poscar;
-    poscar.readPOSCAR(inputFile);
+
+    if (!poscar.readPOSCAR(inputFile)) {
+        std::cerr << "Error: reading POSCAR file " << inputFile << "\n";
+        return 1;
+    }
 
     auto poscar_stand = standardizeCell(poscar, symprec, primitive, idealize);
     if (!poscar_stand) {

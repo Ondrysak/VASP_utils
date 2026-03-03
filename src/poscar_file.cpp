@@ -472,3 +472,59 @@ void POSCAR::toCartesian() {
 
     is_direct = false;
 }
+
+POSCAR POSCAR::makeSupercell(const double S[9]) {
+    if (!is_direct) {
+        toDirect();
+    }
+
+    POSCAR poscar_supercell;
+    poscar_supercell.comment = comment + "_supercell";
+    poscar_supercell.scale = scale;
+    poscar_supercell.is_direct = true;
+    poscar_supercell.elements = elements;
+
+    int nx = static_cast<int>(S[0]);
+    int ny = static_cast<int>(S[4]);
+    int nz = static_cast<int>(S[8]);
+
+    // Expanded lattice
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            poscar_supercell.lattice[i][j] = lattice[i][j] * S[i * 4];  // Diagonální expanze
+        }
+    }
+
+    // Atoms number
+    int multiplier = nx * ny * nz;
+    for (int count : num_atoms) {
+        poscar_supercell.num_atoms.push_back(count * multiplier);
+        poscar_supercell.total_atoms += (count * multiplier);
+    }
+
+    // Atomic positions generation
+    poscar_supercell.coordinates.reserve(poscar_supercell.total_atoms);
+    int current_offset = 0;
+
+    for (size_t e = 0; e < elements.size(); ++e) {
+        for (int a = 0; a < num_atoms[e]; ++a) {
+            Atom orig = coordinates[current_offset + a];
+
+            // Trojitý cyklus pro replikaci v prostoru
+            for (int i = 0; i < nx; ++i) {
+                for (int j = 0; j < ny; ++j) {
+                    for (int k = 0; k < nz; ++k) {
+                        Atom copy;
+                        copy.x = (orig.x + i) / nx;
+                        copy.y = (orig.y + j) / ny;
+                        copy.z = (orig.z + k) / nz;
+                        poscar_supercell.coordinates.push_back(copy);
+                    }
+                }
+            }
+        }
+        current_offset += num_atoms[e];
+    }
+
+    return poscar_supercell;
+}

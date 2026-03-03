@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(VaspUtils VERSION 0.1.5 LANGUAGES C CXX)
+project(VaspUtils VERSION 0.1.6 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -75,6 +75,9 @@ target_link_libraries(poscar_c2d PRIVATE vasp_core)
 
 add_executable(poscar_2ctrls src/poscar_2ctrls.cpp)
 target_link_libraries(poscar_2ctrls PRIVATE vasp_core)
+
+add_executable(poscar_supercell src/poscar_supercell.cpp)
+target_link_libraries(poscar_supercell PRIVATE vasp_core)
 
 # ===== spglib utility =====
 add_executable(poscar_symmetry src/poscar_symmetry.cpp)

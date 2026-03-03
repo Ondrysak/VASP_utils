@@ -31,13 +31,33 @@ void initializeSpglibInput(POSCAR& poscarDirect, double lattice[3][3], std::vect
     int idx{0};
 
     for (size_t i = 0; i < poscarDirect.elements.size(); ++i) {
-        const std::string& el = poscarDirect.elements[i];
+        std::string original = poscarDirect.elements[i];
+        std::string el = "";  // Nový čistý řetězec
+
+        // Ruční filtrace znak po znaku
+        for (char c : original) {
+            // Přidáme jen to, co není lomítko a není mezera
+            if (c != '/' && !std::isspace(static_cast<unsigned char>(c))) {
+                el += c;
+            }
+        }
+
         int n = poscarDirect.num_atoms[i];
         if (element_map.find(el) == element_map.end())
             element_map[el] = type_counter++;
         for (int j = 0; j < n; ++j)
             types[idx++] = element_map[el];
     }
+
+    /* for (size_t i = 0; i < poscarDirect.elements.size(); ++i) {
+         const std::string& el = poscarDirect.elements[i];
+
+         int n = poscarDirect.num_atoms[i];
+         if (element_map.find(el) == element_map.end())
+             element_map[el] = type_counter++;
+         for (int j = 0; j < n; ++j)
+             types[idx++] = element_map[el];
+     }*/
 }
 
 SpglibDatasetPtr analyzeSymmetry(const POSCAR& poscar, const double& symprec) {
