@@ -3,6 +3,7 @@ Still under development. Currently, these utilities for POSCAR file manipulation
 - poscar_d2c - fractional coordinates to cartesian
 - poscar_c2d - cartesian coordinates to fractional
 - poscar_symmetry - find symmetry of a cell
+- poscar_supercell - fcreate supercell
 - poscar_2primitive - create primitive cell
 - poscar_2conventional - create conventional cell
 - poscar_2ctrls - create ctrls file for ecalj/Questaal package from POSCAR
@@ -92,6 +93,11 @@ pre-commit run --hook-stage manual clang-tidy
 ```
 
 ----Versions:----
+
+v_0.1.6
+
+- Added - poscar_supercell
+- Change - Removed problem with element labels in poscar_2primitive and poscar_2conventional
 
 v_0.1.5
 
