@@ -1,7 +1,15 @@
 cmake_minimum_required(VERSION 3.22)
-project(VaspUtils VERSION 0.1.6 LANGUAGES C CXX)
+project(VaspUtils VERSION 0.1.7 LANGUAGES C CXX)
 
 include(FetchContent)
+
+# ===== CLI11 =====
+FetchContent_Declare(
+    cli11
+    GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+    GIT_TAG v2.4.2
+)
+FetchContent_MakeAvailable(cli11)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -65,13 +73,13 @@ target_link_libraries(vasp_spglib PUBLIC Spglib::symspg vasp_core)
 
 # ===== Standard utilities (no spglib) =====
 add_executable(poscar_atom_displace src/poscar_atom_displacement.cpp)
-target_link_libraries(poscar_atom_displace PRIVATE vasp_core)
+target_link_libraries(poscar_atom_displace PRIVATE vasp_core CLI11::CLI11)
 
 add_executable(poscar_d2c src/poscar_d2c.cpp)
-target_link_libraries(poscar_d2c PRIVATE vasp_core)
+target_link_libraries(poscar_d2c PRIVATE vasp_core CLI11::CLI11)
 
 add_executable(poscar_c2d src/poscar_c2d.cpp)
-target_link_libraries(poscar_c2d PRIVATE vasp_core)
+target_link_libraries(poscar_c2d PRIVATE vasp_core CLI11::CLI11)
 
 add_executable(poscar_2ctrls src/poscar_2ctrls.cpp)
 target_link_libraries(poscar_2ctrls PRIVATE vasp_core)
@@ -81,7 +89,7 @@ target_link_libraries(poscar_supercell PRIVATE vasp_core)
 
 # ===== spglib utility =====
 add_executable(poscar_symmetry src/poscar_symmetry.cpp)
-target_link_libraries(poscar_symmetry PRIVATE vasp_spglib)
+target_link_libraries(poscar_symmetry PRIVATE vasp_spglib CLI11::CLI11)
 
 add_executable(poscar_2primitive src/poscar_2primitive.cpp)
 target_link_libraries(poscar_2primitive PRIVATE vasp_spglib)
