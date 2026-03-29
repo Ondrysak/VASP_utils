@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -96,10 +97,39 @@ bool parseLatticeRow(const std::string& line, double row[3]) {
     return iss.eof();
 }
 
-bool parseCoordinateRow(const std::string& line, Atom& atom) {
+bool parseCoordinateRow(const std::string& line, bool selective_dynamics, Atom& atom) {
     std::istringstream iss(line);
     if (!(iss >> atom.x >> atom.y >> atom.z)) {
         return false;
+    }
+
+    atom.selective_flags = {true, true, true};
+    if (selective_dynamics) {
+        std::string fx, fy, fz;
+        if (!(iss >> fx >> fy >> fz)) {
+            return false;
+        }
+
+        auto parseFlag = [](const std::string& token, bool& value) {
+            if (token.empty()) {
+                return false;
+            }
+            const char c = static_cast<char>(std::toupper(static_cast<unsigned char>(token[0])));
+            if (c == 'T') {
+                value = true;
+                return true;
+            }
+            if (c == 'F') {
+                value = false;
+                return true;
+            }
+            return false;
+        };
+
+        if (!parseFlag(fx, atom.selective_flags[0]) || !parseFlag(fy, atom.selective_flags[1]) ||
+            !parseFlag(fz, atom.selective_flags[2])) {
+            return false;
+        }
     }
 
     return true;
@@ -171,12 +201,17 @@ bool parsePoscarFile(std::ifstream& file, POSCAR& parsed, PoscarError& error) {
         return fail(error, PoscarErrorKind::Parse, line_number, "coordinate mode line must not be empty");
     }
 
+    parsed.selective_dynamics = false;
     if (line[0] == 'S' || line[0] == 's') {
         parsed.selective_dynamics = true;
-        return fail(error, PoscarErrorKind::Semantic, line_number, "Selective dynamics is not supported");
+        if (!readRequiredLine(file, line, line_number, error, "coordinate mode")) {
+            return false;
+        }
+        if (line.empty()) {
+            return fail(error, PoscarErrorKind::Parse, line_number, "coordinate mode line must not be empty");
+        }
     }
 
-    parsed.selective_dynamics = false;
     if (line[0] == 'D' || line[0] == 'd') {
         parsed.is_direct = true;
     } else if (line[0] == 'C' || line[0] == 'c' || line[0] == 'K' || line[0] == 'k') {
@@ -190,7 +225,7 @@ bool parsePoscarFile(std::ifstream& file, POSCAR& parsed, PoscarError& error) {
         if (!readRequiredLine(file, line, line_number, error, "atomic coordinates")) {
             return false;
         }
-        if (!parseCoordinateRow(line, parsed.coordinates[static_cast<size_t>(i)])) {
+        if (!parseCoordinateRow(line, parsed.selective_dynamics, parsed.coordinates[static_cast<size_t>(i)])) {
             return fail(error, PoscarErrorKind::Parse, line_number,
                         "failed to parse coordinates for atom " + std::to_string(i));
         }
@@ -341,11 +376,16 @@ bool POSCAR::writePOSCAR(const std::string& filenameOut) {
     file << (is_direct ? "Direct" : "Cartesian") << "\n";
 
     // Writing Atomic coordinates
-    for (size_t i = 0; i < coordinates.size(); ++i)
+    for (size_t i = 0; i < coordinates.size(); ++i) {
         file << std::fixed << std::setprecision(10) << coordinates[i].x << " " << coordinates[i].y << " "
-             << coordinates[i].z << "\n";
-
-    // TO DO for Selective dynamics: include selective dynamics flags if needed
+             << coordinates[i].z;
+        if (selective_dynamics) {
+            file << " " << (coordinates[i].selective_flags[0] ? "T" : "F") << " "
+                 << (coordinates[i].selective_flags[1] ? "T" : "F") << " "
+                 << (coordinates[i].selective_flags[2] ? "T" : "F");
+        }
+        file << "\n";
+    }
 
     file.flush();
     if (!file) {
@@ -358,56 +398,115 @@ bool POSCAR::writePOSCAR(const std::string& filenameOut) {
     return true;
 }
 
-void POSCAR::displaceAtom(size_t atom_index, double amplitude) {
-    if (atom_index >= coordinates.size())
-        return;
+Atom POSCAR::displaceAtomWithVector(size_t atom_index, const DisplacementOptions& options) {
+    Atom displacement{0.0, 0.0, 0.0};
+    if (atom_index >= coordinates.size()) {
+        return displacement;
+    }
 
-    // Generate random vector and normalize it
-    double ex = randomDouble(-1.0, 1.0);
-    double ey = randomDouble(-1.0, 1.0);
-    double ez = randomDouble(-1.0, 1.0);
+    displacement.x = randomDouble(-options.ampx, options.ampx);
+    displacement.y = randomDouble(-options.ampy, options.ampy);
+    displacement.z = randomDouble(-options.ampz, options.ampz);
 
-    double norm = std::sqrt(ex * ex + ey * ey + ez * ez);
+    coordinates[atom_index].x += displacement.x;
+    coordinates[atom_index].y += displacement.y;
+    coordinates[atom_index].z += displacement.z;
 
-    if (norm < 1e-12)
-        return;
-
-    ex = (ex / norm);
-    ey = (ey / norm);
-    ez = (ez / norm);
-
-    // Generate random norm of the random vector, cubicroot needed for uniform representation of volume due to expanding
-    // sphere with r^3
-
-    double r = amplitude * std::cbrt(randomDouble(0.0, 1.0));
-
-    // Apply to the atom
-    coordinates[atom_index].x += ex * r;
-    coordinates[atom_index].y += ey * r;
-    coordinates[atom_index].z += ez * r;
+    return displacement;
 }
 
 void POSCAR::displaceAtoms(int n_atoms, double amplitude) {
-    // Create vector with numbers from 0 to total_atoms-1 and then doing random permutation
-    std::vector<size_t> indices(total_atoms);
-    for (int i = 0; i < total_atoms; ++i)
-        indices[i] = i;
+    DisplacementOptions options;
+    options.ampx = amplitude;
+    options.ampy = amplitude;
+    options.ampz = amplitude;
+    displaceAtoms(n_atoms, options);
+}
 
-    std::shuffle(indices.begin(), indices.end(), getGenerator());
-
-    // Convert to Cartesian if needed
-    bool was_direct = is_direct;
-    if (is_direct)
-        toCartesian();
-
-    // Displace selected atoms
-    for (int i = 0; i < n_atoms; ++i) {
-        displaceAtom(indices[i], amplitude);  // already Cartesian
+void POSCAR::displaceAtoms(int n_atoms, const DisplacementOptions& options) {
+    if (n_atoms <= 0 || total_atoms <= 0) {
+        return;
     }
 
-    // Convert back to Direct if needed
-    if (was_direct)
+    std::vector<size_t> candidates;
+    if (options.candidate_indices.empty()) {
+        candidates.resize(static_cast<size_t>(total_atoms));
+        for (int i = 0; i < total_atoms; ++i) {
+            candidates[static_cast<size_t>(i)] = static_cast<size_t>(i);
+        }
+    } else {
+        candidates = options.candidate_indices;
+    }
+
+    candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+                                    [this](size_t idx) { return idx >= coordinates.size(); }),
+                     candidates.end());
+
+    if (candidates.empty()) {
+        return;
+    }
+
+    std::shuffle(candidates.begin(), candidates.end(), getGenerator());
+
+    const size_t selected_count = std::min(static_cast<size_t>(n_atoms), candidates.size());
+
+    bool was_direct = is_direct;
+    if (was_direct) {
+        toCartesian();
+    }
+
+    std::vector<size_t> selected_indices;
+    selected_indices.reserve(selected_count);
+    Atom net{0.0, 0.0, 0.0};
+    for (size_t i = 0; i < selected_count; ++i) {
+        const size_t idx = candidates[i];
+        Atom d = displaceAtomWithVector(idx, options);
+        net.x += d.x;
+        net.y += d.y;
+        net.z += d.z;
+        selected_indices.push_back(idx);
+    }
+
+    if (options.zero_net && !selected_indices.empty()) {
+        const double inv = 1.0 / static_cast<double>(selected_indices.size());
+        const double mx = net.x * inv;
+        const double my = net.y * inv;
+        const double mz = net.z * inv;
+        for (size_t idx : selected_indices) {
+            coordinates[idx].x -= mx;
+            coordinates[idx].y -= my;
+            coordinates[idx].z -= mz;
+        }
+    }
+
+    if (was_direct) {
         toDirect();
+    }
+
+    if (options.wrap_direct) {
+        const bool started_direct = is_direct;
+        if (!is_direct) {
+            toDirect();
+        }
+
+        auto wrap01 = [](double v) {
+            double wrapped = std::fmod(v, 1.0);
+            if (wrapped < 0.0) {
+                wrapped += 1.0;
+            }
+            return wrapped;
+        };
+
+        for (auto& atom : coordinates) {
+            atom.x = wrap01(atom.x);
+            atom.y = wrap01(atom.y);
+            atom.z = wrap01(atom.z);
+        }
+
+        if (!started_direct) {
+            toCartesian();
+        }
+    }
 }
 
 /*
@@ -498,6 +597,23 @@ void POSCAR::toCartesian() {
     }
 
     is_direct = false;
+}
+
+std::vector<std::string> POSCAR::atomSpecies() const {
+    std::vector<std::string> species;
+    species.reserve(static_cast<size_t>(total_atoms));
+
+    for (size_t i = 0; i < elements.size() && i < num_atoms.size(); ++i) {
+        for (int j = 0; j < num_atoms[i]; ++j) {
+            species.push_back(elements[i]);
+        }
+    }
+
+    if (species.size() > coordinates.size()) {
+        species.resize(coordinates.size());
+    }
+
+    return species;
 }
 
 POSCAR POSCAR::makeSupercell(const double S[9]) {
