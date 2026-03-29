@@ -28,10 +28,6 @@ struct POSCAR {
     POSCAR makeSupercell(const double S[9]);
 
 private:
-    bool readPOSCARHeader(const std::string& filename);
-    bool readPOSCAROptional(const std::string& filename);
-    bool skipLines(std::ifstream& file, int n);
-    bool readPOSCARCoordinates(const std::string& filename);
     void displaceAtom(size_t atom_index, double amplitude);
     void setScaleTo1();
 };

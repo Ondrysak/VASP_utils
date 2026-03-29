@@ -107,3 +107,75 @@ TEST(PoscarIO, ReadWriteRoundTrip) {
         EXPECT_NEAR(original.coordinates[i].z, reloaded.coordinates[i].z, tol);
     }
 }
+
+TEST(PoscarIO, ReReadResetsStateBeforeParsing) {
+    const std::string tmpFile = std::string(TEST_DATA_DIR) + "/test_reread_tmp.poscar";
+    {
+        FILE* file = std::fopen(tmpFile.c_str(), "w");
+        ASSERT_NE(file, nullptr);
+        std::fputs("Single H\n", file);
+        std::fputs("1.0\n", file);
+        std::fputs("1 0 0\n", file);
+        std::fputs("0 1 0\n", file);
+        std::fputs("0 0 1\n", file);
+        std::fputs("H\n", file);
+        std::fputs("1\n", file);
+        std::fputs("Direct\n", file);
+        std::fputs("0 0 0\n", file);
+        std::fclose(file);
+    }
+
+    POSCAR poscar;
+    ASSERT_TRUE(poscar.readPOSCAR(kNaClPath));
+    ASSERT_TRUE(poscar.readPOSCAR(tmpFile));
+    std::remove(tmpFile.c_str());
+
+    EXPECT_EQ(poscar.total_atoms, 1);
+    ASSERT_EQ(poscar.coordinates.size(), 1u);
+    ASSERT_EQ(poscar.num_atoms.size(), 1u);
+    EXPECT_EQ(poscar.num_atoms[0], 1);
+    ASSERT_EQ(poscar.elements.size(), 1u);
+    EXPECT_EQ(poscar.elements[0], "H");
+}
+
+TEST(PoscarIO, ReadFailsWithoutMutatingStateOnMalformedInput) {
+    const std::string tmpFile = std::string(TEST_DATA_DIR) + "/test_invalid_tmp.poscar";
+    {
+        FILE* file = std::fopen(tmpFile.c_str(), "w");
+        ASSERT_NE(file, nullptr);
+        std::fputs("Broken\n", file);
+        std::fputs("1.0\n", file);
+        std::fputs("1 0 0\n", file);
+        std::fputs("0 1 0\n", file);
+        std::fputs("0 0 1\n", file);
+        std::fputs("Na Cl\n", file);
+        std::fputs("1\n", file);
+        std::fputs("\n", file);
+        std::fclose(file);
+    }
+
+    POSCAR poscar;
+    ASSERT_TRUE(poscar.readPOSCAR(kNaClPath));
+
+    const auto original_comment = poscar.comment;
+    const auto original_elements = poscar.elements;
+    const auto original_num_atoms = poscar.num_atoms;
+    const auto original_coordinates = poscar.coordinates;
+    const auto original_total_atoms = poscar.total_atoms;
+    const auto original_is_direct = poscar.is_direct;
+
+    EXPECT_FALSE(poscar.readPOSCAR(tmpFile));
+    std::remove(tmpFile.c_str());
+
+    EXPECT_EQ(poscar.comment, original_comment);
+    EXPECT_EQ(poscar.elements, original_elements);
+    EXPECT_EQ(poscar.num_atoms, original_num_atoms);
+    ASSERT_EQ(poscar.coordinates.size(), original_coordinates.size());
+    for (size_t i = 0; i < original_coordinates.size(); ++i) {
+        EXPECT_DOUBLE_EQ(poscar.coordinates[i].x, original_coordinates[i].x);
+        EXPECT_DOUBLE_EQ(poscar.coordinates[i].y, original_coordinates[i].y);
+        EXPECT_DOUBLE_EQ(poscar.coordinates[i].z, original_coordinates[i].z);
+    }
+    EXPECT_EQ(poscar.total_atoms, original_total_atoms);
+    EXPECT_EQ(poscar.is_direct, original_is_direct);
+}
