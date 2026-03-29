@@ -33,7 +33,10 @@ int main(int argc, char* argv[]) {
     }
 
     POSCAR poscar;
-    poscar.readPOSCAR(inputFile);
+    if (!poscar.readPOSCAR(inputFile)) {
+        std::cerr << "Error: failed to parse input POSCAR " << inputFile << "\n";
+        return 1;
+    }
 
     auto dataset = analyzeSymmetry(poscar, symprec);
 
