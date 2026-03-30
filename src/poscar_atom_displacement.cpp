@@ -27,8 +27,8 @@ int main(int argc, char* argv[]) {
 
     CLI11_PARSE(app, argc, argv);
 
-    if (amplitude > 0.1) {
-        std::cerr << "Warning: amplitude is above 10%! That can cause errors running VASP!\n";
+    if (amplitude > 0.75) {
+        std::cerr << "Warning: amplitude is above 0.75 Angstroms! That can cause errors running VASP!\n";
     }
 
     POSCAR original;
