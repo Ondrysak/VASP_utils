@@ -3,12 +3,11 @@ Still under development. Currently, these utilities for POSCAR file manipulation
 - poscar_d2c - fractional coordinates to cartesian
 - poscar_c2d - cartesian coordinates to fractional
 - poscar_symmetry - find symmetry of a cell
-- poscar_supercell - fcreate supercell
+- poscar_supercell - create supercell
 - poscar_2primitive - create primitive cell
 - poscar_2conventional - create conventional cell
 - poscar_2ctrls - create ctrls file for ecalj/Questaal package from POSCAR
 - poscar_atom_displace - randomly displace atoms
-
 
 For now, the code is as it is; nothing is guaranteed.
 
@@ -18,42 +17,73 @@ Deformation generator for elastic constants calculation.
 
 ----Installation:----
 
-Download from here. Using CMake to compile.
+Requires CMake >= 3.22, a C++17 compiler, and BLAS/LAPACK/LAPACKE installed.
+CLI11 and spglib are fetched automatically by CMake.
 
-Recommended commands:
 ```
-mkdir build
-
-cd build
-
+mkdir build && cd build
 cmake ..
-
-make
+cmake --build . --parallel
 ```
-------------------------------------------------------
 
-The directory/bin is created with the executables.
+Executables are placed in `build/bin/`.
+
+----Usage:----
+
+The following tools use CLI11 for argument parsing (run with `--help` for full options):
+
+**poscar_d2c** — Direct to Cartesian conversion
+```
+poscar_d2c [--input/-i <file>] [--output/-o <file>]
+```
+Defaults: input `POSCAR`, output `POSCAR_cartesian`.
+
+**poscar_c2d** — Cartesian to Direct conversion
+```
+poscar_c2d [--input/-i <file>] [--output/-o <file>]
+```
+Defaults: input `POSCAR`, output `POSCAR_direct`.
+
+**poscar_atom_displace** — Randomly displace atoms to generate perturbed structures
+```
+poscar_atom_displace [--input/-i <file>] [--nfiles/-n <int>] [--natoms <int>]
+                     [--allatoms] [--amp/-a <float>]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--input/-i` | `POSCAR` | Input POSCAR file |
+| `--nfiles/-n` | `1` | Number of output files |
+| `--natoms` | `1` | Number of atoms to displace |
+| `--allatoms` | off | Displace all atoms (overrides `--natoms`) |
+| `--amp/-a` | `0.01` | Max displacement amplitude in Angstroms |
+
+**poscar_symmetry** — Symmetry analysis using spglib
+```
+poscar_symmetry [--input/-i <file>] [--output/-o <file>] [--symprec <float>]
+                [--primitive/-p] [--wyckoff/-w] [--symoper/-s]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--input/-i` | `POSCAR` | Input POSCAR file |
+| `--output/-o` | `POSCAR_primitive` | Output file (used with `--primitive`) |
+| `--symprec` | `1e-5` | Symmetry tolerance |
+| `--primitive/-p` | off | Generate and write primitive cell |
+| `--wyckoff/-w` | off | Print Wyckoff positions |
+| `--symoper/-s` | off | Print all symmetry operations |
 
 ----Dependencies:----
 
 This project relies on external scientific libraries for symmetry analysis and linear algebra operations.
 
-----SPGLIB----
+**SPGLIB** — space group symmetry determination and primitive cell search.
+Fetched automatically by CMake. Official: https://github.com/spglib/spglib
 
-This project uses SPGLIB for:
+**CLI11** — command-line argument parsing.
+Fetched automatically by CMake. Official: https://github.com/CLIUtils/CLI11
 
-Space group symmetry determination
-
-Primitive cell search
-
-SPGLIB is integrated via CMake and built automatically if not found on the system (depending on configuration).
-
-Official website:
-https://github.com/spglib/spglib
-
-----BLAS / LAPACKE----
-
-This project uses BLAS and LAPACKE for linear algebra operations, specifically:
+**BLAS / LAPACK / LAPACKE** — linear algebra; must be installed on the system.
 
 ----Development Setup:----
 
@@ -93,6 +123,11 @@ pre-commit run --hook-stage manual clang-tidy
 ```
 
 ----Versions:----
+
+v_0.1.7
+
+- Changed - poscar_d2c, poscar_c2d, poscar_atom_displace, poscar_symmetry migrated to CLI11 argument parsing
+- Fixed - spglib CMake integration (header include path, cmake_minimum_required 3.22)
 
 v_0.1.6
 

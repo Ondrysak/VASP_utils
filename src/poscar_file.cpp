@@ -10,160 +10,196 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
 
-bool POSCAR::skipLines(std::ifstream& file, int n) {
-    std::string tmp;
-    for (int i = 0; i < n; ++i) {
-        if (!std::getline(file, tmp))
-            return false;
+namespace {
+
+enum class PoscarErrorKind { Io, Parse, Semantic };
+
+struct PoscarError {
+    PoscarErrorKind kind{PoscarErrorKind::Parse};
+    int line_number{0};
+    std::string message;
+};
+
+bool fail(PoscarError& error, PoscarErrorKind kind, int line_number, std::string message) {
+    error.kind = kind;
+    error.line_number = line_number;
+    error.message = std::move(message);
+    return false;
+}
+
+void reportReadError(const std::string& filename, const PoscarError& error) {
+    const char* category = "Parse error";
+    if (error.kind == PoscarErrorKind::Io) {
+        category = "I/O error";
+    } else if (error.kind == PoscarErrorKind::Semantic) {
+        category = "Semantic error";
     }
+
+    std::cerr << category << " while reading " << filename;
+    if (error.line_number > 0) {
+        std::cerr << " at line " << error.line_number;
+    }
+    std::cerr << ": " << error.message << "\n";
+}
+
+bool readRequiredLine(std::ifstream& file, std::string& line, int& line_number, PoscarError& error,
+                      const std::string& context) {
+    if (!std::getline(file, line)) {
+        return fail(error, file.bad() ? PoscarErrorKind::Io : PoscarErrorKind::Parse, line_number + 1,
+                    "unexpected end of file while reading " + context);
+    }
+    ++line_number;
     return true;
 }
 
-bool POSCAR::readPOSCARHeader(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file) {
-        std::cerr << "Error: cannot open file " << filename << "\n";
+bool parseSingleDouble(const std::string& line, double& value) {
+    std::istringstream iss(line);
+    iss >> value;
+    if (!iss)
+        return false;
+
+    iss >> std::ws;
+    return iss.eof();
+}
+
+template <typename T>
+bool parseVectorLine(const std::string& line, std::vector<T>& out) {
+    std::istringstream iss(line);
+    T value{};
+    while (iss >> value) {
+        out.push_back(value);
+    }
+
+    if (iss.fail() && !iss.eof()) {
         return false;
     }
 
+    return true;
+}
+
+bool parseLatticeRow(const std::string& line, double row[3]) {
+    std::istringstream iss(line);
+    if (!(iss >> row[0] >> row[1] >> row[2])) {
+        return false;
+    }
+
+    iss >> std::ws;
+    return iss.eof();
+}
+
+bool parseCoordinateRow(const std::string& line, Atom& atom) {
+    std::istringstream iss(line);
+    if (!(iss >> atom.x >> atom.y >> atom.z)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool parsePoscarFile(std::ifstream& file, POSCAR& parsed, PoscarError& error) {
     std::string line;
+    int line_number = 0;
 
-    // Reading Line 1: comment
-    if (!std::getline(file, comment))
-        return false;
-
-    // Reading Line 2: scale
-    if (!std::getline(file, line))
-        return false;
-
-    scale = std::stod(line);
-    if (scale < 0) {
-        std::cerr << "Error: Scaling factor is negative!.\n";
-        return false;
-    }
-    if (scale == 0) {
-        std::cerr << "Error: Scaling factor is 0!.\n";
+    if (!readRequiredLine(file, parsed.comment, line_number, error, "comment line")) {
         return false;
     }
 
-    // Reading Lines 3-5: lattice vectors
+    if (!readRequiredLine(file, line, line_number, error, "scaling factor")) {
+        return false;
+    }
+    if (!parseSingleDouble(line, parsed.scale)) {
+        return fail(error, PoscarErrorKind::Parse, line_number, "invalid scaling factor");
+    }
+    if (parsed.scale < 0.0) {
+        return fail(error, PoscarErrorKind::Semantic, line_number, "scaling factor must not be negative");
+    }
+    if (parsed.scale == 0.0) {
+        return fail(error, PoscarErrorKind::Semantic, line_number, "scaling factor must not be zero");
+    }
+
     for (int i = 0; i < 3; ++i) {
-        if (!std::getline(file, line))
+        if (!readRequiredLine(file, line, line_number, error, "lattice vector")) {
             return false;
-
-        std::istringstream iss(line);
-        iss >> lattice[i][0] >> lattice[i][1] >> lattice[i][2];
+        }
+        if (!parseLatticeRow(line, parsed.lattice[i])) {
+            return fail(error, PoscarErrorKind::Parse, line_number, "invalid lattice vector row");
+        }
     }
 
-    // Reading Line 6: element symbols
-    if (!std::getline(file, line))
-        return false;
-
-    std::istringstream iss_elements(line);
-    std::string elem;
-    elements.clear();
-    while (iss_elements >> elem) {
-        elements.push_back(elem);
-    }
-
-    // Reading Line 7: number of atoms per element
-    if (!std::getline(file, line))
-        return false;
-
-    std::istringstream iss_counts(line);
-    num_atoms.clear();
-    int n;
-    while (iss_counts >> n) {
-        num_atoms.push_back(n);
-    }
-
-    return true;
-}
-
-bool POSCAR::readPOSCAROptional(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file) {
-        std::cerr << "Error: cannot open file " << filename << "\n";
+    if (!readRequiredLine(file, line, line_number, error, "element symbols")) {
         return false;
     }
+    if (!parseVectorLine(line, parsed.elements) || parsed.elements.empty()) {
+        return fail(error, PoscarErrorKind::Parse, line_number, "invalid or empty element symbols line");
+    }
 
-    std::string line;
-
-    // Skip first 7 header lines (already read)
-    if (!skipLines(file, 7))
+    if (!readRequiredLine(file, line, line_number, error, "atom counts")) {
         return false;
+    }
+    if (!parseVectorLine(line, parsed.num_atoms) || parsed.num_atoms.empty()) {
+        return fail(error, PoscarErrorKind::Parse, line_number, "invalid or empty atom counts line");
+    }
+    if (parsed.elements.size() != parsed.num_atoms.size()) {
+        return fail(error, PoscarErrorKind::Semantic, line_number,
+                    "number of element symbols does not match number of atom counts");
+    }
 
-    // Reading Optional: Selective dynamics or Direct/Cartesian
-    if (!std::getline(file, line))
+    parsed.total_atoms = 0;
+    for (int count : parsed.num_atoms) {
+        if (count < 0) {
+            return fail(error, PoscarErrorKind::Semantic, line_number, "atom counts must not be negative");
+        }
+        if (parsed.total_atoms > std::numeric_limits<int>::max() - count) {
+            return fail(error, PoscarErrorKind::Semantic, line_number, "total atom count overflows int");
+        }
+        parsed.total_atoms += count;
+    }
+
+    if (!readRequiredLine(file, line, line_number, error, "coordinate mode")) {
         return false;
+    }
+    if (line.empty()) {
+        return fail(error, PoscarErrorKind::Parse, line_number, "coordinate mode line must not be empty");
+    }
+
     if (line[0] == 'S' || line[0] == 's') {
-        selective_dynamics = true;
-
-        // For now selective dynamics is NOT supported!!! Remove if implemented with this keyword!!!
-        std::cerr << "Error: selective dynamics is NOT supported yet!\n";
-        return false;
-
-        // Reading next line (Direct/Cartesian) if Selective dynamic is present
-        if (!std::getline(file, line))
-            return false;
-    } else {
-        selective_dynamics = false;
+        parsed.selective_dynamics = true;
+        return fail(error, PoscarErrorKind::Semantic, line_number, "Selective dynamics is not supported");
     }
 
+    parsed.selective_dynamics = false;
     if (line[0] == 'D' || line[0] == 'd') {
-        is_direct = true;
-    } else
-        is_direct = false;
-
-    return true;
-}
-
-bool POSCAR::readPOSCARCoordinates(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file) {
-        std::cerr << "Error: cannot open file " << filename << "\n";
-        return false;
+        parsed.is_direct = true;
+    } else if (line[0] == 'C' || line[0] == 'c' || line[0] == 'K' || line[0] == 'k') {
+        parsed.is_direct = false;
+    } else {
+        return fail(error, PoscarErrorKind::Semantic, line_number, "coordinate mode must be Direct or Cartesian");
     }
 
-    std::string line;
-
-    // Skip first 7 header lines (already read)
-    if (!skipLines(file, 7))
-        return false;
-
-    // Skip optional line for Selective dynamics if present
-    if (selective_dynamics) {
-        if (!std::getline(file, line))
-            return false;
-    }
-
-    // Skip Direct/Cartesian line (already validated)
-    if (!std::getline(file, line))
-        return false;
-
-    // Now read all coordinates
-    for (size_t i = 0; i < coordinates.size(); ++i) {
-        if (!std::getline(file, line)) {
-            std::cerr << "Error: not enough coordinate lines in POSCAR\n";
+    parsed.coordinates.resize(parsed.total_atoms);
+    for (int i = 0; i < parsed.total_atoms; ++i) {
+        if (!readRequiredLine(file, line, line_number, error, "atomic coordinates")) {
             return false;
         }
-
-        std::istringstream iss(line);
-        if (!(iss >> coordinates[i].x >> coordinates[i].y >> coordinates[i].z)) {
-            std::cerr << "Error: failed to parse coordinates for atom " << i << "\n";
-            return false;
+        if (!parseCoordinateRow(line, parsed.coordinates[static_cast<size_t>(i)])) {
+            return fail(error, PoscarErrorKind::Parse, line_number,
+                        "failed to parse coordinates for atom " + std::to_string(i));
         }
     }
 
     return true;
 }
+
+}  // namespace
 
 void POSCAR::setScaleTo1() {
     if (std::abs(scale - 1.0) < 1e-12)
@@ -187,30 +223,21 @@ void POSCAR::setScaleTo1() {
 }
 
 bool POSCAR::readPOSCAR(const std::string& filename) {
-    if (!readPOSCARHeader(filename)) {
-        std::cerr << "Error: reading POSCAR header from " << filename << "\n";
+    std::ifstream file(filename);
+    if (!file) {
+        std::cerr << "I/O error while reading " << filename << ": cannot open file\n";
         return false;
     }
 
-    // Compute total number of atoms
-    for (int count : num_atoms)
-        total_atoms += count;
-
-    coordinates.resize(total_atoms);
-
-    if (!readPOSCAROptional(filename)) {
-        std::cerr << "Error reading POSCAR structural keywords from " << filename << "\n";
+    POSCAR parsed{};
+    PoscarError error;
+    if (!parsePoscarFile(file, parsed, error)) {
+        reportReadError(filename, error);
         return false;
     }
 
-    if (!readPOSCARCoordinates(filename)) {
-        std::cerr << "Error reading POSCAR coordinates from " << filename << "\n";
-        return false;
-    }
-
-    // To avoid future issues
+    *this = std::move(parsed);
     setScaleTo1();
-
     return true;
 }
 

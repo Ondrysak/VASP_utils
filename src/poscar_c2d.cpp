@@ -1,54 +1,19 @@
-#include "poscar_c2d.h"
-
+#include <CLI/CLI.hpp>
 #include <iostream>
 #include <string>
 
 #include "poscar_file.h"
 
-bool readInput(int argc, char* argv[], std::string& inputFile, std::string& outputFile) {
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-
-        if (arg == "--help") {
-            printHelp();
-            return false;
-        } else if (arg == "--input") {
-            if (i + 1 >= argc)
-                return false;
-            inputFile = argv[++i];
-        } else if (arg == "--output") {
-            if (i + 1 >= argc)
-                return false;
-            outputFile = argv[++i];
-        } else {
-            std::cerr << "Warning: unknown argument! Ignoring!\n";
-            printHelp();
-        }
-    }
-    return true;
-}
-
-void printHelp() {
-    std::cerr << "Usage:\n"
-                 "  poscar_c2d [options]\n\n"
-                 "Options:\n"
-                 "  --input   input POSCAR file name\n"
-                 "  --output  output POSCAR file name\n"
-                 "  --help    Show this help message\n\n"
-                 "Example:\n"
-                 "  poscar_c2d --input POSCARin --output POSCARout\n";
-}
-
 int main(int argc, char* argv[]) {
+    CLI::App app{"Convert POSCAR coordinates from Cartesian to Direct"};
+
     std::string inputFile{"POSCAR"};
     std::string outputFile{"POSCAR_direct"};
 
-    if (!readInput(argc, argv, inputFile, outputFile)) {
-        if (argc > 1 && std::string(argv[1]) != "--help") {
-            std::cerr << "Error parsing input arguments\n";
-        }
-        return 1;
-    }
+    app.add_option("--input,-i", inputFile, "Input POSCAR file")->capture_default_str();
+    app.add_option("--output,-o", outputFile, "Output POSCAR file")->capture_default_str();
+
+    CLI11_PARSE(app, argc, argv);
 
     POSCAR poscar;
     if (!poscar.readPOSCAR(inputFile)) {
@@ -69,6 +34,5 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "Output written to: " << outputFile << "\n";
-
     return 0;
 }

@@ -1,96 +1,42 @@
-#include "poscar_symmetry.h"
-
 #include <spglib.h>
 
-#include <fstream>
+#include <CLI/CLI.hpp>
 #include <iostream>
-#include <optional>
 #include <string>
 
 #include "poscar_file.h"
 #include "symmetry.h"
 
-bool readInput(int argc, char* argv[], std::string& inputFile, double& symprec, bool& wyckoff, bool& symoperation) {
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
+int main(int argc, char* argv[]) {
+    CLI::App app{"Analyze symmetry of a POSCAR structure using spglib"};
 
-        if (arg == "--help") {
-            printHelp();
-            return false;
-        } else if (arg == "--input") {
-            if (i + 1 >= argc)
-                return false;
-            inputFile = argv[++i];
-        } else if (arg == "--wyckoff") {
-            wyckoff = true;
-        } else if (arg == "--symoper") {
-            symoperation = true;
-        } else if (arg == "--symprec") {
-            if (i + 1 >= argc)
-                return false;
-            try {
-                symprec = std::stod(argv[++i]);
-            } catch (...) {
-                return false;
-            }
-        } else {
-            std::cerr << "Warning: unknown argument! Ignoring it!\n";
-            printHelp();
-        }
-    }
-    return true;
-}
+    std::string inputFile{"POSCAR"};
+    std::string outputFile{"POSCAR_primitive"};
+    double symprec{1e-5};
+    bool primitive{false};
+    bool wyckoff{false};
+    bool symoperation{false};
 
-bool validateInput(const std::string& inputFile, double& symprec) {
-    std::ifstream file(inputFile);
-    if (!file) {
-        std::cerr << "Error: cannot open file " << inputFile << "\n";
-        return false;
-    }
-    if (symprec < 0) {
-        std::cerr << "Error: symprec cannot be negative!!!\n";
-        return false;
-    }
-    if (symprec == 0) {
-        std::cerr << "Error: symprec cannot be 0!!!\n";
-        return false;
-    }
+    app.add_option("--input,-i", inputFile, "Input POSCAR file")->capture_default_str()->check(CLI::ExistingFile);
+    app.add_option("--output,-o", outputFile, "Output POSCAR file (used with --primitive)")->capture_default_str();
+    app.add_option("--symprec", symprec, "Symmetry tolerance (spglib symprec)")
+        ->capture_default_str()
+        ->check(CLI::PositiveNumber);
+    app.add_flag("--primitive,-p", primitive, "Generate primitive cell POSCAR");
+    app.add_flag("--wyckoff,-w", wyckoff, "Print Wyckoff positions");
+    app.add_flag("--symoper,-s", symoperation, "Print symmetry operations");
+
+    CLI11_PARSE(app, argc, argv);
+
     if (symprec > 1e-3) {
         std::cerr << "Warning: symprec is too high! Consider using default value 1e-5.\n";
     }
 
-    return true;
-}
-
-void printHelp() {
-    std::cerr << "Usage:\n"
-                 "  poscar_symmetry [options]\n\n"
-                 "Options:\n"
-                 "  --input      input POSCAR file name (default: POSCAR)\n"
-                 "  --symprec    symmetry tolerance (spglib symprec) (default: 1e-5)\n"
-                 "  --wyckoff    print the Wyckoff positions\n"
-                 "  --symoper    print the symmetry operations\n"
-                 "  --help       show this help message\n\n"
-                 "Example:\n"
-                 "  poscar_symmetry --input POSCARin --symprec 1e-5 \n";
-}
-
-int main(int argc, char* argv[]) {
-    std::string inputFile{"POSCAR"};
-    double symprec{1e-5};
-    bool wyckoff{false};
-    bool symoperation{false};
-
-    if (!readInput(argc, argv, inputFile, symprec, wyckoff, symoperation)) {
-        return 1;
-    }
-
-    if (!validateInput(inputFile, symprec)) {
-        return 1;
-    }
-
     POSCAR poscar;
-    poscar.readPOSCAR(inputFile);
+    if (!poscar.readPOSCAR(inputFile)) {
+        std::cerr << "Error: failed to parse input POSCAR " << inputFile << "\n";
+        return 1;
+    }
 
     auto dataset = analyzeSymmetry(poscar, symprec);
 
@@ -99,6 +45,21 @@ int main(int argc, char* argv[]) {
     } else {
         std::cerr << "Error: failed to analyze symmetry.\n";
         return 1;
+    }
+
+    if (primitive) {
+        std::cout << "Creating the primitive cell file.\n";
+        auto maybePrimitive = standardizeCell(poscar, symprec, 1, 0);
+
+        if (!maybePrimitive) {
+            std::cerr << "Error: failed to create primitive POSCAR.\n";
+            return 1;
+        }
+
+        if (!maybePrimitive->writePOSCAR(outputFile)) {
+            std::cerr << "Error: failed to write primitive POSCAR to " << outputFile << "\n";
+            return 1;
+        }
     }
 
     return 0;
