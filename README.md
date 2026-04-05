@@ -46,8 +46,10 @@ Defaults: input `POSCAR`, output `POSCAR_direct`.
 
 **poscar_atom_displace** — Randomly displace atoms to generate perturbed structures
 ```
-poscar_atom_displace [--input/-i <file>] [--nfiles/-n <int>] [--natoms <int>]
-                     [--allatoms] [--amp/-a <float>]
+poscar_atom_displace [--input/-i <file>] [--nfiles/-n <int>] [--natoms <int>] [--allatoms]
+                     [--amp/-a <float>] [--ampx <float>] [--ampy <float>] [--ampz <float>]
+                     [--seed <int>] [--species <Na,Cl,...>] [--indices <1,3-5,...>]
+                     [--wrap] [--zero-net]
 ```
 
 | Option | Default | Description |
@@ -55,8 +57,26 @@ poscar_atom_displace [--input/-i <file>] [--nfiles/-n <int>] [--natoms <int>]
 | `--input/-i` | `POSCAR` | Input POSCAR file |
 | `--nfiles/-n` | `1` | Number of output files |
 | `--natoms` | `1` | Number of atoms to displace |
-| `--allatoms` | off | Displace all atoms (overrides `--natoms`) |
-| `--amp/-a` | `0.01` | Max displacement amplitude in Angstroms |
+| `--allatoms` | off | Displace all eligible atoms (overrides `--natoms`) |
+| `--amp/-a` | `0.01` | Isotropic max displacement amplitude in Angstroms |
+| `--ampx` / `--ampy` / `--ampz` | `0.01` | Axis-specific max displacement amplitudes (override `--amp`) |
+| `--seed` | random | Seed RNG for deterministic perturbations |
+| `--species` | all species | Comma-separated element symbols to consider |
+| `--indices` | all atoms | 1-based list/ranges (e.g., `1,3-5,8`) to consider |
+| `--wrap` | off | Wrap fractional coordinates into `[0,1)` after displacement |
+| `--zero-net` | off | Remove net Cartesian translation across displaced atoms |
+
+Examples:
+```
+# Deterministic perturbation of all Cl atoms in 5 structures
+poscar_atom_displace -i POSCAR -n 5 --species Cl --allatoms --seed 2026 --amp 0.02
+
+# Anisotropic displacement on selected atoms and keep atoms wrapped in cell
+poscar_atom_displace --indices 1,3-8 --natoms 4 --ampx 0.03 --ampy 0.01 --ampz 0.00 --wrap
+
+# Apply perturbation with zero net translation correction
+poscar_atom_displace --allatoms --zero-net --amp 0.015
+```
 
 **poscar_symmetry** — Symmetry analysis using spglib
 ```

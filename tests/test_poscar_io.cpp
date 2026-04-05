@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -178,4 +179,46 @@ TEST(PoscarIO, ReadFailsWithoutMutatingStateOnMalformedInput) {
     }
     EXPECT_EQ(poscar.total_atoms, original_total_atoms);
     EXPECT_EQ(poscar.is_direct, original_is_direct);
+}
+
+
+TEST(PoscarIO, SelectiveDynamicsRoundTrip) {
+    const std::string tmpFile = std::string(TEST_DATA_DIR) + "/test_selective_roundtrip_tmp.poscar";
+    {
+        FILE* file = std::fopen(tmpFile.c_str(), "w");
+        ASSERT_NE(file, nullptr);
+        std::fputs("Selective test\n", file);
+        std::fputs("1.0\n", file);
+        std::fputs("1 0 0\n", file);
+        std::fputs("0 1 0\n", file);
+        std::fputs("0 0 1\n", file);
+        std::fputs("Na Cl\n", file);
+        std::fputs("1 1\n", file);
+        std::fputs("Selective dynamics\n", file);
+        std::fputs("Direct\n", file);
+        std::fputs("0.1 0.2 0.3 T F T\n", file);
+        std::fputs("0.4 0.5 0.6 F F T\n", file);
+        std::fclose(file);
+    }
+
+    POSCAR original;
+    ASSERT_TRUE(original.readPOSCAR(tmpFile));
+    ASSERT_TRUE(original.selective_dynamics);
+    ASSERT_EQ(original.coordinates.size(), 2u);
+    EXPECT_EQ(original.coordinates[0].selective_flags, (std::array<bool, 3>{true, false, true}));
+    EXPECT_EQ(original.coordinates[1].selective_flags, (std::array<bool, 3>{false, false, true}));
+
+    const std::string tmpOut = std::string(TEST_DATA_DIR) + "/test_selective_roundtrip_out_tmp.poscar";
+    ASSERT_TRUE(original.writePOSCAR(tmpOut));
+
+    POSCAR reloaded;
+    ASSERT_TRUE(reloaded.readPOSCAR(tmpOut));
+
+    std::remove(tmpFile.c_str());
+    std::remove(tmpOut.c_str());
+
+    EXPECT_TRUE(reloaded.selective_dynamics);
+    ASSERT_EQ(reloaded.coordinates.size(), 2u);
+    EXPECT_EQ(reloaded.coordinates[0].selective_flags, (std::array<bool, 3>{true, false, true}));
+    EXPECT_EQ(reloaded.coordinates[1].selective_flags, (std::array<bool, 3>{false, false, true}));
 }
