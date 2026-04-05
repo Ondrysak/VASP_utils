@@ -98,9 +98,9 @@ int main(int argc, char* argv[]) {
 
     auto maybe_kpath = getBravaisKPath(*maybe_conv, *dataset);
     if (!maybe_kpath) {
-        std::cerr << "Error: Bravais lattice type not supported in v1.\n"
+        std::cerr << "Error: Bravais lattice type not supported.\n"
                   << "  (international symbol: " << dataset->international_symbol << ")\n"
-                  << "  Supported: cP cF cI  tP tI  oP  hP  hR\n";
+                  << "  Supported: cP cF cI  tP tI  oP oF oI oC  hP hR  mP mC  aP\n";
         return 1;
     }
 

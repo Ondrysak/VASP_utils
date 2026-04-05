@@ -344,7 +344,19 @@ TEST(KPath, hR2_ParametricPoints) {
 
 TEST(KPath, UnknownSG_ReturnsNullopt) {
     auto conv = makePOSCAR(4, 0, 0, 0, 4, 0, 0, 0, 4);
-    auto ds = makeDataset(10, "P2/m");  // monoclinic — not in our table
+    auto ds = makeDataset(0, "???");  // invalid SG — not in any range
     auto kp = getBravaisKPath(conv, ds);
     EXPECT_FALSE(kp.has_value());
+}
+
+// SG 10 P2/m is monoclinic P — now fully supported.
+TEST(KPath, mP_NowSupported) {
+    const double b = 4.0, c = 5.0;
+    const double alpha = 70.0 * M_PI / 180.0;
+    // b vector along y, c vector at angle alpha from b
+    auto conv = makePOSCAR(3, 0, 0, 0, b, 0, 0, c * std::cos(alpha), c * std::sin(alpha));
+    auto ds = makeDataset(10, "P2/m");
+    auto kp = getBravaisKPath(conv, ds);
+    ASSERT_TRUE(kp.has_value());
+    EXPECT_EQ(kp->bravais_label, "mP");
 }

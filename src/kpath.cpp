@@ -15,7 +15,7 @@ namespace {
 // Bravais lattice classification
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum class BravaisType { cP, cF, cI, tP, tI, oP, hP, hR, Unknown };
+enum class BravaisType { cP, cF, cI, tP, tI, oP, oF, oI, oC, hP, hR, mP, mC, aP, Unknown };
 
 static BravaisType detectBravais(int sg, const char* intl_sym) {
     // Extract centering letter: first non-space character of international symbol.
@@ -42,11 +42,25 @@ static BravaisType detectBravais(int sg, const char* intl_sym) {
     } else if (sg >= 16 && sg <= 74) {
         if (centering == 'P')
             return BravaisType::oP;
+        if (centering == 'F')
+            return BravaisType::oF;
+        if (centering == 'I')
+            return BravaisType::oI;
+        if (centering == 'C' || centering == 'A' || centering == 'B')
+            return BravaisType::oC;
     } else if (sg >= 168 && sg <= 194) {
         return BravaisType::hP;
     } else if (sg >= 143 && sg <= 167) {
         if (centering == 'R')
             return BravaisType::hR;
+        return BravaisType::hP;  // P centering in this range is also hexagonal
+    } else if (sg >= 3 && sg <= 15) {
+        if (centering == 'P')
+            return BravaisType::mP;
+        if (centering == 'C' || centering == 'A' || centering == 'B' || centering == 'I')
+            return BravaisType::mC;
+    } else if (sg >= 1 && sg <= 2) {
+        return BravaisType::aP;
     }
     return BravaisType::Unknown;
 }
@@ -59,8 +73,49 @@ static double vecnorm(const double v[3]) {
     return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 }
 
+static double vecdot(const double a[3], const double b[3]) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+static void veccross(const double a[3], const double b[3], double out[3]) {
+    out[0] = a[1] * b[2] - a[2] * b[1];
+    out[1] = a[2] * b[0] - a[0] * b[2];
+    out[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+// Angle between two vectors in radians.
+static double vecangle(const double a[3], const double b[3]) {
+    double cosval = vecdot(a, b) / (vecnorm(a) * vecnorm(b));
+    // Clamp to [-1, 1] to guard against floating-point noise.
+    if (cosval > 1.0)
+        cosval = 1.0;
+    if (cosval < -1.0)
+        cosval = -1.0;
+    return std::acos(cosval);
+}
+
+// Compute reciprocal lattice vectors (without 2π factor) from POSCAR row vectors.
+// b1 = (a2 × a3) / V,  b2 = (a3 × a1) / V,  b3 = (a1 × a2) / V
+static void reciprocal_lattice(const POSCAR& conv, double b1[3], double b2[3], double b3[3]) {
+    const double* a1 = conv.lattice[0];
+    const double* a2 = conv.lattice[1];
+    const double* a3 = conv.lattice[2];
+
+    double a2xa3[3], a3xa1[3], a1xa2[3];
+    veccross(a2, a3, a2xa3);
+    veccross(a3, a1, a3xa1);
+    veccross(a1, a2, a1xa2);
+
+    const double V = vecdot(a1, a2xa3);
+    for (int i = 0; i < 3; ++i) {
+        b1[i] = a2xa3[i] / V;
+        b2[i] = a3xa1[i] / V;
+        b3[i] = a1xa2[i] / V;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// K-path builders  (Setyawan-Curtarolo Tables 2-9, 12)
+// K-path builders  (Setyawan-Curtarolo Tables 2-14)
 // ─────────────────────────────────────────────────────────────────────────────
 
 static KPath kpath_cP() {
@@ -143,6 +198,117 @@ static KPath kpath_oP() {
     return p;
 }
 
+// oF: face-centred orthorhombic — three subcases based on 1/a² vs 1/b²+1/c².
+static KPath kpath_oF(const POSCAR& conv) {
+    const double a = vecnorm(conv.lattice[0]);
+    const double b = vecnorm(conv.lattice[1]);
+    const double c = vecnorm(conv.lattice[2]);
+    const double a2 = a * a, b2 = b * b, c2 = c * c;
+
+    KPath p;
+    if (1.0 / a2 > 1.0 / b2 + 1.0 / c2) {
+        // oF1
+        const double zeta = (1.0 + a2 / b2 - a2 / c2) / 4.0;
+        const double eta = (1.0 + a2 / b2 + a2 / c2) / 4.0;
+        p.bravais_label = "oF1";
+        p.points = {{"G", 0, 0, 0},
+                    {"A", 0.5, 0.5 + zeta, zeta},
+                    {"A1", 0.5, 0.5 - zeta, 1.0 - zeta},
+                    {"L", 0.5, 0.5, 0.5},
+                    {"T", 1.0, 0.5, 0.5},
+                    {"X", 0.0, eta, eta},
+                    {"X1", 1.0, 1.0 - eta, 1.0 - eta},
+                    {"Y", 0.5, 0.0, 0.5},
+                    {"Z", 0.5, 0.5, 0.0}};
+        p.segments = {{"G", "Y"},  {"Y", "T"},  {"T", "Z"}, {"Z", "G"}, {"G", "X"}, {"X", "A1"},
+                      {"A1", "Y"}, {"T", "X1"}, {"X", "A"}, {"A", "Z"}, {"L", "G"}};
+    } else if (1.0 / a2 < 1.0 / b2 + 1.0 / c2) {
+        // oF2
+        const double phi = (1.0 + c2 / b2 - c2 / a2) / 4.0;
+        const double eta = (1.0 + a2 / b2 - a2 / c2) / 4.0;
+        const double delta = (1.0 + b2 / a2 - b2 / c2) / 4.0;
+        p.bravais_label = "oF2";
+        p.points = {{"G", 0, 0, 0},
+                    {"C", 0.5, 0.5 - eta, 1.0 - eta},
+                    {"C1", 0.5, 0.5 + eta, eta},
+                    {"D", 0.5 - delta, 0.5, 1.0 - delta},
+                    {"D1", 0.5 + delta, 0.5, delta},
+                    {"L", 0.5, 0.5, 0.5},
+                    {"H", 1.0 - phi, 0.5 - phi, 0.5},
+                    {"H1", phi, 0.5 + phi, 0.5},
+                    {"X", 0.0, 0.5, 0.5},
+                    {"Y", 0.5, 0.0, 0.5},
+                    {"Z", 0.5, 0.5, 0.0}};
+        p.segments = {{"G", "Y"},  {"Y", "C"}, {"C", "D"},  {"D", "X"},  {"X", "G"}, {"G", "Z"}, {"Z", "D1"},
+                      {"D1", "H"}, {"H", "C"}, {"C1", "Z"}, {"X", "H1"}, {"H", "Y"}, {"L", "G"}};
+    } else {
+        // oF3 (degenerate: 1/a² == 1/b² + 1/c²)
+        const double zeta = (1.0 + a2 / b2 - a2 / c2) / 4.0;
+        const double eta = (1.0 + a2 / b2 + a2 / c2) / 4.0;
+        p.bravais_label = "oF3";
+        p.points = {{"G", 0, 0, 0},
+                    {"A", 0.5, 0.5 + zeta, zeta},
+                    {"A1", 0.5, 0.5 - zeta, 1.0 - zeta},
+                    {"L", 0.5, 0.5, 0.5},
+                    {"T", 1.0, 0.5, 0.5},
+                    {"X", 0.0, eta, eta},
+                    {"X1", 1.0, 1.0 - eta, 1.0 - eta},
+                    {"Y", 0.5, 0.0, 0.5},
+                    {"Z", 0.5, 0.5, 0.0}};
+        p.segments = {{"G", "Y"},  {"Y", "T"},  {"T", "Z"}, {"Z", "G"}, {"G", "X"},
+                      {"X", "A1"}, {"A1", "Y"}, {"X", "A"}, {"A", "Z"}, {"L", "G"}};
+    }
+    return p;
+}
+
+// oI: body-centred orthorhombic.
+static KPath kpath_oI(const POSCAR& conv) {
+    const double a = vecnorm(conv.lattice[0]);
+    const double b = vecnorm(conv.lattice[1]);
+    const double c = vecnorm(conv.lattice[2]);
+    const double a2 = a * a, b2 = b * b, c2 = c * c;
+    const double zeta = (1.0 + a2 / c2) / 4.0;
+    const double eta = (1.0 + b2 / c2) / 4.0;
+    const double delta = (b2 - a2) / (4.0 * c2);
+    const double mu = (a2 + b2) / (4.0 * c2);
+
+    KPath p;
+    p.bravais_label = "oI";
+    p.points = {{"G", 0, 0, 0},
+                {"L", -mu, mu, 0.5 - delta},
+                {"L1", mu, -mu, 0.5 + delta},
+                {"L2", 0.5 - delta, 0.5 + delta, -mu},
+                {"R", 0.0, 0.5, 0.0},
+                {"S", 0.5, 0.0, 0.0},
+                {"T", 0.0, 0.0, 0.5},
+                {"W", 0.25, 0.25, 0.25},
+                {"X", -zeta, zeta, zeta},
+                {"X1", zeta, 1.0 - zeta, -zeta},
+                {"Y", eta, -eta, eta},
+                {"Y1", 1.0 - eta, eta, -eta},
+                {"Z", 0.5, 0.5, -0.5}};
+    p.segments = {{"G", "X"}, {"X", "L"}, {"L", "T"}, {"T", "W"}, {"W", "R"},  {"R", "X1"}, {"X1", "Z"},
+                  {"Z", "G"}, {"G", "Y"}, {"Y", "S"}, {"S", "W"}, {"L1", "Y"}, {"Y1", "Z"}};
+    return p;
+}
+
+// oC: C-centred (or A-centred) orthorhombic.
+static KPath kpath_oC(const POSCAR& conv) {
+    const double a = vecnorm(conv.lattice[0]);
+    const double b = vecnorm(conv.lattice[1]);
+    const double zeta = (1.0 + a * a / (b * b)) / 4.0;
+
+    KPath p;
+    p.bravais_label = "oC";
+    p.points = {{"G", 0, 0, 0},         {"A", zeta, zeta, 0.5},         {"A1", -zeta, 1.0 - zeta, 0.5},
+                {"R", 0.0, 0.5, 0.5},   {"S", 0.0, 0.5, 0.0},           {"T", -0.5, 0.5, 0.5},
+                {"X", zeta, zeta, 0.0}, {"X1", -zeta, 1.0 - zeta, 0.0}, {"Y", -0.5, 0.5, 0.0},
+                {"Z", 0.0, 0.0, 0.5}};
+    p.segments = {{"G", "X"}, {"X", "S"},  {"S", "R"},   {"R", "A"},  {"A", "Z"}, {"Z", "G"},
+                  {"G", "Y"}, {"Y", "X1"}, {"X1", "A1"}, {"A1", "T"}, {"T", "Y"}, {"Z", "T"}};
+    return p;
+}
+
 static KPath kpath_hP() {
     KPath p;
     p.bravais_label = "hP";
@@ -205,6 +371,216 @@ static KPath kpath_hR(const POSCAR& conv) {
     return p;
 }
 
+// mP: primitive monoclinic (c-unique convention: alpha is the non-90° angle).
+// Setyawan Table 10.
+static KPath kpath_mP(const POSCAR& conv) {
+    const double b = vecnorm(conv.lattice[1]);
+    const double c = vecnorm(conv.lattice[2]);
+    // alpha = angle between b (lattice[1]) and c (lattice[2])
+    const double alpha = vecangle(conv.lattice[1], conv.lattice[2]);
+    const double eta = (1.0 - b * std::cos(alpha) / c) / (2.0 * std::sin(alpha) * std::sin(alpha));
+    const double nu = 0.5 - eta * c * std::cos(alpha) / b;
+
+    KPath p;
+    p.bravais_label = "mP";
+    p.points = {
+        {"G", 0, 0, 0},         {"A", 0.5, 0.5, 0.0},      {"C", 0.0, 0.5, 0.5},       {"D", 0.5, 0.0, 0.5},
+        {"D1", 0.5, 0.0, -0.5}, {"E", 0.5, 0.5, 0.5},      {"H", 0.0, eta, 1.0 - nu},  {"H1", 0.0, 1.0 - eta, nu},
+        {"H2", 0.0, eta, -nu},  {"M", 0.5, eta, 1.0 - nu}, {"M1", 0.5, 1.0 - eta, nu}, {"M2", 0.5, eta, -nu},
+        {"X", 0.0, 0.5, 0.0},   {"Y", 0.0, 0.0, 0.5},      {"Y1", 0.0, 0.0, -0.5},     {"Z", 0.5, 0.0, 0.0}};
+    p.segments = {{"G", "Y"}, {"Y", "H"},  {"H", "C"}, {"C", "E"}, {"E", "M1"}, {"M1", "A"},
+                  {"A", "X"}, {"X", "H1"}, {"M", "D"}, {"D", "Z"}, {"Y", "D"}};
+    return p;
+}
+
+// mC: C-centred monoclinic — five subcases depending on reciprocal lattice angle kgamma
+// and the parameter b*cos(alpha)/c + b²sin²(alpha)/a².
+// Setyawan Tables 11a-11e.
+static KPath kpath_mC(const POSCAR& conv) {
+    const double a = vecnorm(conv.lattice[0]);
+    const double b = vecnorm(conv.lattice[1]);
+    const double c = vecnorm(conv.lattice[2]);
+    const double alpha = vecangle(conv.lattice[1], conv.lattice[2]);
+
+    // Reciprocal lattice vectors (no 2π).
+    double b1[3], b2[3], b3[3];
+    reciprocal_lattice(conv, b1, b2, b3);
+    const double kgamma_deg = vecangle(b1, b2) * 180.0 / M_PI;
+
+    KPath p;
+
+    if (kgamma_deg > 90.0) {
+        // mC1
+        const double zeta = (2.0 - b * std::cos(alpha) / c) / (4.0 * std::sin(alpha) * std::sin(alpha));
+        const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
+        const double psi = 0.75 - a * a / (4.0 * b * b * std::sin(alpha) * std::sin(alpha));
+        const double phi = psi + (0.75 - psi) * b * std::cos(alpha) / c;
+        p.bravais_label = "mC1";
+        p.points = {{"G", 0, 0, 0},
+                    {"N", 0.5, 0.0, 0.0},
+                    {"N1", 0.0, -0.5, 0.0},
+                    {"F", 1.0 - zeta, 1.0 - zeta, 1.0 - eta},
+                    {"F1", zeta, zeta, eta},
+                    {"F2", -zeta, -zeta, 1.0 - eta},
+                    {"I", phi, 1.0 - phi, 0.5},
+                    {"I1", 1.0 - phi, phi - 1.0, 0.5},
+                    {"L", 0.5, 0.5, 0.5},
+                    {"M", 0.5, 0.0, 0.5},
+                    {"X", 1.0 - psi, psi - 1.0, 0.0},
+                    {"X1", psi, 1.0 - psi, 0.0},
+                    {"X2", psi - 1.0, -psi, 0.0},
+                    {"Y", 0.5, 0.5, 0.0},
+                    {"Y1", -0.5, -0.5, 0.0},
+                    {"Z", 0.0, 0.0, 0.5}};
+        p.segments = {{"G", "Y"},  {"Y", "F"},  {"F", "L"}, {"L", "I"}, {"I1", "Z"},
+                      {"Z", "F1"}, {"Y", "X1"}, {"X", "G"}, {"G", "N"}, {"M", "G"}};
+    } else if (kgamma_deg < 90.0) {
+        const double test = b * std::cos(alpha) / c + b * b * std::sin(alpha) * std::sin(alpha) / (a * a);
+        if (test < 1.0) {
+            // mC3
+            const double mu = (1.0 + b * b / (a * a)) / 4.0;
+            const double delta = b * c * std::cos(alpha) / (2.0 * a * a);
+            const double zeta = mu - 0.25 + (1.0 - b * std::cos(alpha) / c) / (4.0 * std::sin(alpha) * std::sin(alpha));
+            const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
+            const double phi = 1.0 + zeta - 2.0 * mu;
+            const double psi = eta - 2.0 * delta;
+            p.bravais_label = "mC3";
+            p.points = {{"G", 0, 0, 0},
+                        {"F", 1.0 - phi, 1.0 - phi, 1.0 - psi},
+                        {"F1", phi, phi - 1.0, psi},
+                        {"F2", 1.0 - phi, -phi, 1.0 - psi},
+                        {"H", zeta, zeta, eta},
+                        {"H1", 1.0 - zeta, -zeta, 1.0 - eta},
+                        {"H2", -zeta, -zeta, 1.0 - eta},
+                        {"I", 0.5, -0.5, 0.5},
+                        {"M", 0.5, 0.0, 0.5},
+                        {"N", 0.5, 0.0, 0.0},
+                        {"N1", 0.0, -0.5, 0.0},
+                        {"X", 0.5, -0.5, 0.0},
+                        {"Y", mu, mu, delta},
+                        {"Y1", 1.0 - mu, -mu, -delta},
+                        {"Y2", -mu, -mu, -delta},
+                        {"Y3", mu, mu - 1.0, delta},
+                        {"Z", 0.0, 0.0, 0.5}};
+            p.segments = {{"G", "Y"},   {"Y", "F"},  {"F", "H"}, {"H", "Z"}, {"Z", "I"}, {"I", "F1"},
+                          {"H1", "Y1"}, {"Y1", "X"}, {"X", "G"}, {"G", "N"}, {"M", "G"}};
+        } else if (test > 1.0) {
+            // mC5
+            const double zeta =
+                (b * b / (a * a) + (1.0 - b * std::cos(alpha) / c) / (std::sin(alpha) * std::sin(alpha))) / 4.0;
+            const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
+            const double mu = eta / 2.0 + b * b / (4.0 * a * a) - b * c * std::cos(alpha) / (2.0 * a * a);
+            const double nu = 2.0 * mu - zeta;
+            const double rho = 1.0 - zeta * a * a / (b * b);
+            const double omega = (4.0 * nu - 1.0 - b * b * std::sin(alpha) * std::sin(alpha) / (a * a)) * c /
+                                 (2.0 * b * std::cos(alpha));
+            const double delta = zeta * c * std::cos(alpha) / b + omega / 2.0 - 0.25;
+            p.bravais_label = "mC5";
+            p.points = {{"G", 0, 0, 0},
+                        {"F", nu, nu, omega},
+                        {"F1", 1.0 - nu, 1.0 - nu, 1.0 - omega},
+                        {"F2", nu, nu - 1.0, omega},
+                        {"H", zeta, zeta, eta},
+                        {"H1", 1.0 - zeta, -zeta, 1.0 - eta},
+                        {"H2", -zeta, -zeta, 1.0 - eta},
+                        {"I", rho, 1.0 - rho, 0.5},
+                        {"I1", 1.0 - rho, rho - 1.0, 0.5},
+                        {"L", 0.5, 0.5, 0.5},
+                        {"M", 0.5, 0.0, 0.5},
+                        {"N", 0.5, 0.0, 0.0},
+                        {"N1", 0.0, -0.5, 0.0},
+                        {"X", 0.5, -0.5, 0.0},
+                        {"Y", mu, mu, delta},
+                        {"Y1", 1.0 - mu, -mu, -delta},
+                        {"Y2", -mu, -mu, -delta},
+                        {"Y3", mu, mu - 1.0, delta},
+                        {"Z", 0.0, 0.0, 0.5}};
+            p.segments = {{"G", "Y"},  {"Y", "F"},   {"F", "L"},  {"L", "I"}, {"I1", "Z"}, {"Z", "H"},
+                          {"H", "F1"}, {"H1", "Y1"}, {"Y1", "X"}, {"X", "G"}, {"G", "N"},  {"M", "G"}};
+        } else {
+            // mC4 (degenerate)
+            const double mu = (1.0 + b * b / (a * a)) / 4.0;
+            const double delta = b * c * std::cos(alpha) / (2.0 * a * a);
+            const double zeta = mu - 0.25 + (1.0 - b * std::cos(alpha) / c) / (4.0 * std::sin(alpha) * std::sin(alpha));
+            const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
+            const double phi = 1.0 + zeta - 2.0 * mu;
+            const double psi = eta - 2.0 * delta;
+            p.bravais_label = "mC4";
+            p.points = {{"G", 0, 0, 0},
+                        {"F", 1.0 - phi, 1.0 - phi, 1.0 - psi},
+                        {"F1", phi, phi - 1.0, psi},
+                        {"F2", 1.0 - phi, -phi, 1.0 - psi},
+                        {"H", zeta, zeta, eta},
+                        {"H1", 1.0 - zeta, -zeta, 1.0 - eta},
+                        {"H2", -zeta, -zeta, 1.0 - eta},
+                        {"I", 0.5, -0.5, 0.5},
+                        {"M", 0.5, 0.0, 0.5},
+                        {"N", 0.5, 0.0, 0.0},
+                        {"N1", 0.0, -0.5, 0.0},
+                        {"X", 0.5, -0.5, 0.0},
+                        {"Y", mu, mu, delta},
+                        {"Y1", 1.0 - mu, -mu, -delta},
+                        {"Y2", -mu, -mu, -delta},
+                        {"Y3", mu, mu - 1.0, delta},
+                        {"Z", 0.0, 0.0, 0.5}};
+            p.segments = {{"G", "Y"},   {"Y", "F"},  {"F", "H"}, {"H", "Z"}, {"Z", "I"},
+                          {"H1", "Y1"}, {"Y1", "X"}, {"X", "G"}, {"G", "N"}, {"M", "G"}};
+        }
+    } else {
+        // mC2 (kgamma == 90°)
+        const double zeta = (2.0 - b * std::cos(alpha) / c) / (4.0 * std::sin(alpha) * std::sin(alpha));
+        const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
+        const double psi = 0.75 - a * a / (4.0 * b * b * std::sin(alpha) * std::sin(alpha));
+        const double phi = psi + (0.75 - psi) * b * std::cos(alpha) / c;
+        p.bravais_label = "mC2";
+        p.points = {{"G", 0, 0, 0},
+                    {"N", 0.5, 0.0, 0.0},
+                    {"N1", 0.0, -0.5, 0.0},
+                    {"F", 1.0 - zeta, 1.0 - zeta, 1.0 - eta},
+                    {"F1", zeta, zeta, eta},
+                    {"F2", -zeta, -zeta, 1.0 - eta},
+                    {"F3", 1.0 - zeta, -zeta, 1.0 - eta},
+                    {"I", phi, 1.0 - phi, 0.5},
+                    {"I1", 1.0 - phi, phi - 1.0, 0.5},
+                    {"L", 0.5, 0.5, 0.5},
+                    {"M", 0.5, 0.0, 0.5},
+                    {"X", 1.0 - psi, psi - 1.0, 0.0},
+                    {"X1", psi, 1.0 - psi, 0.0},
+                    {"X2", psi - 1.0, -psi, 0.0},
+                    {"Y", 0.5, 0.5, 0.0},
+                    {"Y1", -0.5, -0.5, 0.0},
+                    {"Z", 0.0, 0.0, 0.5}};
+        p.segments = {{"G", "Y"}, {"Y", "F"}, {"F", "L"}, {"L", "I"}, {"I1", "Z"}, {"Z", "F1"}, {"N", "G"}, {"G", "M"}};
+    }
+    return p;
+}
+
+// aP: triclinic — two subcases based on reciprocal lattice angles.
+// TRI1a: all reciprocal angles > 90° (or kgamma >= 90° with kalpha,kbeta > 90°)
+// TRI1b: all reciprocal angles < 90° (or kgamma <= 90° with kalpha,kbeta < 90°)
+static KPath kpath_aP(const POSCAR& conv) {
+    double b1[3], b2[3], b3[3];
+    reciprocal_lattice(conv, b1, b2, b3);
+
+    const double kalpha_deg = vecangle(b2, b3) * 180.0 / M_PI;
+    const double kbeta_deg = vecangle(b1, b3) * 180.0 / M_PI;
+    const double kgamma_deg = vecangle(b1, b2) * 180.0 / M_PI;
+
+    KPath p;
+    if (kalpha_deg > 90.0 && kbeta_deg > 90.0 && kgamma_deg >= 90.0) {
+        p.bravais_label = "aP1";
+        p.points = {{"G", 0, 0, 0},       {"L", 0.5, 0.5, 0.0}, {"M", 0.0, 0.5, 0.5}, {"N", 0.5, 0.0, 0.5},
+                    {"R", 0.5, 0.5, 0.5}, {"X", 0.5, 0.0, 0.0}, {"Y", 0.0, 0.5, 0.0}, {"Z", 0.0, 0.0, 0.5}};
+        p.segments = {{"X", "G"}, {"G", "Y"}, {"L", "G"}, {"G", "Z"}, {"N", "G"}, {"G", "M"}, {"R", "G"}};
+    } else {
+        p.bravais_label = "aP2";
+        p.points = {{"G", 0, 0, 0},        {"L", 0.5, -0.5, 0.0}, {"M", 0.0, 0.0, 0.5}, {"N", -0.5, -0.5, 0.5},
+                    {"R", 0.0, -0.5, 0.5}, {"X", 0.0, -0.5, 0.0}, {"Y", 0.5, 0.0, 0.0}, {"Z", -0.5, 0.0, 0.5}};
+        p.segments = {{"X", "G"}, {"G", "Y"}, {"L", "G"}, {"G", "Z"}, {"N", "G"}, {"G", "M"}, {"R", "G"}};
+    }
+    return p;
+}
+
 }  // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -227,10 +603,22 @@ std::optional<KPath> getBravaisKPath(const POSCAR& std_conv, const SpglibDataset
             return kpath_tI(std_conv);
         case BravaisType::oP:
             return kpath_oP();
+        case BravaisType::oF:
+            return kpath_oF(std_conv);
+        case BravaisType::oI:
+            return kpath_oI(std_conv);
+        case BravaisType::oC:
+            return kpath_oC(std_conv);
         case BravaisType::hP:
             return kpath_hP();
         case BravaisType::hR:
             return kpath_hR(std_conv);
+        case BravaisType::mP:
+            return kpath_mP(std_conv);
+        case BravaisType::mC:
+            return kpath_mC(std_conv);
+        case BravaisType::aP:
+            return kpath_aP(std_conv);
         default:
             return std::nullopt;
     }
