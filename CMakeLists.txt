@@ -139,3 +139,20 @@ add_executable(vasp_kpath_tests
 target_link_libraries(vasp_kpath_tests PRIVATE vasp_kpath GTest::gtest_main)
 
 gtest_discover_tests(vasp_kpath_tests)
+
+# ===== Documentation (Doxygen) =====
+find_package(Doxygen OPTIONAL_COMPONENTS dot)
+if(DOXYGEN_FOUND)
+    set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/docs)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in
+                   ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Generating HTML documentation with Doxygen"
+        VERBATIM
+    )
+    message(STATUS "Doxygen found — build the 'docs' target to generate documentation")
+else()
+    message(STATUS "Doxygen not found — 'docs' target unavailable")
+endif()

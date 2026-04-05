@@ -1,0 +1,32 @@
+PROJECT_NAME           = "VASP_utils"
+PROJECT_NUMBER         = @PROJECT_VERSION@
+PROJECT_BRIEF          = "Command-line utilities for VASP crystal structure preparation"
+
+OUTPUT_DIRECTORY       = @DOXYGEN_OUTPUT_DIR@
+
+INPUT                  = @PROJECT_SOURCE_DIR@/include \
+                         @PROJECT_SOURCE_DIR@/src \
+                         @PROJECT_SOURCE_DIR@/README.md
+USE_MDFILE_AS_MAINPAGE = @PROJECT_SOURCE_DIR@/README.md
+FILE_PATTERNS          = *.h *.cpp *.md
+RECURSIVE              = NO
+
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+JAVADOC_AUTOBRIEF      = YES
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+
+QUIET                  = YES
+WARNINGS               = YES
+
+# Show call graphs if dot is available
+HAVE_DOT               = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+
+SORT_MEMBER_DOCS       = NO
+SHOW_FILES             = YES
+SHOW_NAMESPACES        = NO
