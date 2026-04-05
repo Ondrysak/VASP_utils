@@ -1,9 +1,7 @@
 #include <algorithm>
-#include <cctype>
 #include <CLI/CLI.hpp>
 #include <iostream>
 #include <set>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -12,34 +10,8 @@
 
 namespace {
 
-std::vector<std::string> splitCsv(const std::string& text) {
-    std::vector<std::string> out;
-    std::stringstream ss(text);
-    std::string item;
-    while (std::getline(ss, item, ',')) {
-        item.erase(std::remove_if(item.begin(), item.end(), [](unsigned char c) { return std::isspace(c); }),
-                   item.end());
-        if (!item.empty()) {
-            out.push_back(item);
-        }
-    }
-    return out;
-}
-
-bool parseIndicesSpec(const std::string& spec, int total_atoms, std::set<size_t>& indices_out) {
-    if (spec.empty()) {
-        return true;
-    }
-
-    std::stringstream ss(spec);
-    std::string token;
-    while (std::getline(ss, token, ',')) {
-        token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char c) { return std::isspace(c); }),
-                    token.end());
-        if (token.empty()) {
-            continue;
-        }
-
+bool parseIndicesSpec(const std::vector<std::string>& tokens, int total_atoms, std::set<size_t>& indices_out) {
+    for (const auto& token : tokens) {
         const auto dash = token.find('-');
         if (dash == std::string::npos) {
             int idx = 0;
@@ -52,26 +24,23 @@ bool parseIndicesSpec(const std::string& spec, int total_atoms, std::set<size_t>
                 return false;
             }
             indices_out.insert(static_cast<size_t>(idx - 1));
-            continue;
-        }
-
-        int lo = 0;
-        int hi = 0;
-        try {
-            lo = std::stoi(token.substr(0, dash));
-            hi = std::stoi(token.substr(dash + 1));
-        } catch (...) {
-            return false;
-        }
-
-        if (lo > hi || lo < 1 || hi > total_atoms) {
-            return false;
-        }
-        for (int i = lo; i <= hi; ++i) {
-            indices_out.insert(static_cast<size_t>(i - 1));
+        } else {
+            int lo = 0;
+            int hi = 0;
+            try {
+                lo = std::stoi(token.substr(0, dash));
+                hi = std::stoi(token.substr(dash + 1));
+            } catch (...) {
+                return false;
+            }
+            if (lo > hi || lo < 1 || hi > total_atoms) {
+                return false;
+            }
+            for (int i = lo; i <= hi; ++i) {
+                indices_out.insert(static_cast<size_t>(i - 1));
+            }
         }
     }
-
     return true;
 }
 
@@ -92,8 +61,8 @@ int main(int argc, char* argv[]) {
     bool zero_net{false};
     unsigned int seed{0};
     bool seed_provided{false};
-    std::string species_filter;
-    std::string indices_spec;
+    std::vector<std::string> species_filter;
+    std::vector<std::string> indices_tokens;
 
     app.add_option("--input,-i", filename, "Input POSCAR file")->capture_default_str()->check(CLI::ExistingFile);
     app.add_option("--nfiles,-n", n_files, "Number of displaced structure files to create")
@@ -118,8 +87,8 @@ int main(int argc, char* argv[]) {
     app.add_option("--seed", seed, "Random seed for deterministic displacements")
         ->capture_default_str()
         ->each([&seed_provided](const std::string&) { seed_provided = true; });
-    app.add_option("--species", species_filter, "Comma-separated list of element symbols to displace");
-    app.add_option("--indices", indices_spec, "1-based atom indices and ranges (e.g. 1,3-5,8)");
+    app.add_option("--species", species_filter, "Comma-separated list of element symbols to displace")->delimiter(',');
+    app.add_option("--indices", indices_tokens, "1-based atom indices and ranges (e.g. 1,3-5,8)")->delimiter(',');
     app.add_flag("--wrap", wrap, "Wrap resulting fractional coordinates into [0,1)");
     app.add_flag("--zero-net", zero_net, "Remove net Cartesian translation over displaced atoms");
 
@@ -152,10 +121,9 @@ int main(int argc, char* argv[]) {
     }
 
     if (!species_filter.empty()) {
-        const auto wanted_species = splitCsv(species_filter);
         std::set<size_t> by_species;
         for (size_t i = 0; i < atom_species.size(); ++i) {
-            if (std::find(wanted_species.begin(), wanted_species.end(), atom_species[i]) != wanted_species.end()) {
+            if (std::find(species_filter.begin(), species_filter.end(), atom_species[i]) != species_filter.end()) {
                 by_species.insert(i);
             }
         }
@@ -166,9 +134,9 @@ int main(int argc, char* argv[]) {
         selected = std::move(filtered);
     }
 
-    if (!indices_spec.empty()) {
+    if (!indices_tokens.empty()) {
         std::set<size_t> by_indices;
-        if (!parseIndicesSpec(indices_spec, original.total_atoms, by_indices)) {
+        if (!parseIndicesSpec(indices_tokens, original.total_atoms, by_indices)) {
             std::cerr << "Error: invalid --indices specification. Use e.g. 1,3-5,8\n";
             return 1;
         }
