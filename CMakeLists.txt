@@ -131,3 +131,11 @@ target_compile_definitions(vasp_tests PRIVATE
 )
 
 gtest_discover_tests(vasp_tests)
+
+add_executable(vasp_kpath_tests
+    tests/test_kpath.cpp
+)
+
+target_link_libraries(vasp_kpath_tests PRIVATE vasp_kpath GTest::gtest_main)
+
+gtest_discover_tests(vasp_kpath_tests)
