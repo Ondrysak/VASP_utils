@@ -371,15 +371,21 @@ static KPath kpath_hR(const POSCAR& conv) {
     return p;
 }
 
-// mP: primitive monoclinic (c-unique convention: alpha is the non-90° angle).
+// mP: primitive monoclinic.
+// spglib returns the conventional cell in b-unique setting: lattice[1] is the unique axis.
+// S-C formula uses the two non-unique axis lengths and the acute monoclinic angle between them.
+// Mapping: S-C "b" <- |lattice[0]|, S-C "c" <- |lattice[2]|,
+//          S-C angle <- acute(angle(lattice[0], lattice[2])).
+// spglib's beta (a-c angle) is always >= 90°; we force it to acute for the S-C formula.
 // Setyawan Table 10.
 static KPath kpath_mP(const POSCAR& conv) {
-    const double b = vecnorm(conv.lattice[1]);
-    const double c = vecnorm(conv.lattice[2]);
-    // alpha = angle between b (lattice[1]) and c (lattice[2])
-    const double alpha = vecangle(conv.lattice[1], conv.lattice[2]);
-    const double eta = (1.0 - b * std::cos(alpha) / c) / (2.0 * std::sin(alpha) * std::sin(alpha));
-    const double nu = 0.5 - eta * c * std::cos(alpha) / b;
+    const double b = vecnorm(conv.lattice[0]);  // S-C "b": first non-unique
+    const double c = vecnorm(conv.lattice[2]);  // S-C "c": second non-unique
+    // S-C uses the acute monoclinic angle; spglib b-unique gives beta >= 90°.
+    const double beta_raw = vecangle(conv.lattice[0], conv.lattice[2]);
+    const double beta = (beta_raw > M_PI / 2.0) ? (M_PI - beta_raw) : beta_raw;
+    const double eta = (1.0 - b * std::cos(beta) / c) / (2.0 * std::sin(beta) * std::sin(beta));
+    const double nu = 0.5 - eta * c * std::cos(beta) / b;
 
     KPath p;
     p.bravais_label = "mP";
@@ -395,26 +401,47 @@ static KPath kpath_mP(const POSCAR& conv) {
 
 // mC: C-centred monoclinic — five subcases depending on reciprocal lattice angle kgamma
 // and the parameter b*cos(alpha)/c + b²sin²(alpha)/a².
+// spglib returns the conventional cell in b-unique setting: lattice[1] is the unique axis.
+// S-C formula mapping: S-C "a" (unique) <- |lattice[1]|,
+//                      S-C "b" <- |lattice[0]|, S-C "c" <- |lattice[2]|,
+//                      S-C angle <- acute(angle(lattice[0], lattice[2])).
+// kgamma is the gamma angle of the PRIMITIVE cell's reciprocal lattice.
 // Setyawan Tables 11a-11e.
 static KPath kpath_mC(const POSCAR& conv) {
-    const double a = vecnorm(conv.lattice[0]);
-    const double b = vecnorm(conv.lattice[1]);
-    const double c = vecnorm(conv.lattice[2]);
-    const double alpha = vecangle(conv.lattice[1], conv.lattice[2]);
+    const double a = vecnorm(conv.lattice[1]);  // S-C "a": unique axis
+    const double b = vecnorm(conv.lattice[0]);  // S-C "b": first non-unique
+    const double c = vecnorm(conv.lattice[2]);  // S-C "c": second non-unique
+    // S-C uses the acute monoclinic angle; spglib b-unique gives beta >= 90°.
+    const double beta_raw = vecangle(conv.lattice[0], conv.lattice[2]);
+    const double beta = (beta_raw > M_PI / 2.0) ? (M_PI - beta_raw) : beta_raw;
 
-    // Reciprocal lattice vectors (no 2π).
-    double b1[3], b2[3], b3[3];
-    reciprocal_lattice(conv, b1, b2, b3);
-    const double kgamma_deg = vecangle(b1, b2) * 180.0 / M_PI;
+    // Compute kgamma from the primitive cell's reciprocal lattice.
+    // C-centering: a_p = (a_conv + b_conv)/2, b_p = (-a_conv + b_conv)/2, c_p = c_conv.
+    double ap[3], bp_[3], cp_[3];
+    for (int i = 0; i < 3; ++i) {
+        ap[i] = (conv.lattice[0][i] + conv.lattice[1][i]) * 0.5;
+        bp_[i] = (conv.lattice[0][i] - conv.lattice[1][i]) * 0.5;  // (a-b)/2, not (-a+b)/2
+        cp_[i] = conv.lattice[2][i];
+    }
+    double bpxcp[3], cpxap[3];
+    veccross(bp_, cp_, bpxcp);
+    veccross(cp_, ap, cpxap);
+    const double Vp = vecdot(ap, bpxcp);
+    double b1p[3], b2p[3];
+    for (int i = 0; i < 3; ++i) {
+        b1p[i] = bpxcp[i] / Vp;
+        b2p[i] = cpxap[i] / Vp;
+    }
+    const double kgamma_deg = vecangle(b1p, b2p) * 180.0 / M_PI;
 
     KPath p;
 
     if (kgamma_deg > 90.0) {
         // mC1
-        const double zeta = (2.0 - b * std::cos(alpha) / c) / (4.0 * std::sin(alpha) * std::sin(alpha));
-        const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
-        const double psi = 0.75 - a * a / (4.0 * b * b * std::sin(alpha) * std::sin(alpha));
-        const double phi = psi + (0.75 - psi) * b * std::cos(alpha) / c;
+        const double zeta = (2.0 - b * std::cos(beta) / c) / (4.0 * std::sin(beta) * std::sin(beta));
+        const double eta = 0.5 + 2.0 * zeta * c * std::cos(beta) / b;
+        const double psi = 0.75 - a * a / (4.0 * b * b * std::sin(beta) * std::sin(beta));
+        const double phi = psi + (0.75 - psi) * b * std::cos(beta) / c;
         p.bravais_label = "mC1";
         p.points = {{"G", 0, 0, 0},
                     {"N", 0.5, 0.0, 0.0},
@@ -435,13 +462,13 @@ static KPath kpath_mC(const POSCAR& conv) {
         p.segments = {{"G", "Y"},  {"Y", "F"},  {"F", "L"}, {"L", "I"}, {"I1", "Z"},
                       {"Z", "F1"}, {"Y", "X1"}, {"X", "G"}, {"G", "N"}, {"M", "G"}};
     } else if (kgamma_deg < 90.0) {
-        const double test = b * std::cos(alpha) / c + b * b * std::sin(alpha) * std::sin(alpha) / (a * a);
+        const double test = b * std::cos(beta) / c + b * b * std::sin(beta) * std::sin(beta) / (a * a);
         if (test < 1.0) {
             // mC3
             const double mu = (1.0 + b * b / (a * a)) / 4.0;
-            const double delta = b * c * std::cos(alpha) / (2.0 * a * a);
-            const double zeta = mu - 0.25 + (1.0 - b * std::cos(alpha) / c) / (4.0 * std::sin(alpha) * std::sin(alpha));
-            const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
+            const double delta = b * c * std::cos(beta) / (2.0 * a * a);
+            const double zeta = mu - 0.25 + (1.0 - b * std::cos(beta) / c) / (4.0 * std::sin(beta) * std::sin(beta));
+            const double eta = 0.5 + 2.0 * zeta * c * std::cos(beta) / b;
             const double phi = 1.0 + zeta - 2.0 * mu;
             const double psi = eta - 2.0 * delta;
             p.bravais_label = "mC3";
@@ -467,14 +494,14 @@ static KPath kpath_mC(const POSCAR& conv) {
         } else if (test > 1.0) {
             // mC5
             const double zeta =
-                (b * b / (a * a) + (1.0 - b * std::cos(alpha) / c) / (std::sin(alpha) * std::sin(alpha))) / 4.0;
-            const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
-            const double mu = eta / 2.0 + b * b / (4.0 * a * a) - b * c * std::cos(alpha) / (2.0 * a * a);
+                (b * b / (a * a) + (1.0 - b * std::cos(beta) / c) / (std::sin(beta) * std::sin(beta))) / 4.0;
+            const double eta = 0.5 + 2.0 * zeta * c * std::cos(beta) / b;
+            const double mu = eta / 2.0 + b * b / (4.0 * a * a) - b * c * std::cos(beta) / (2.0 * a * a);
             const double nu = 2.0 * mu - zeta;
             const double rho = 1.0 - zeta * a * a / (b * b);
-            const double omega = (4.0 * nu - 1.0 - b * b * std::sin(alpha) * std::sin(alpha) / (a * a)) * c /
-                                 (2.0 * b * std::cos(alpha));
-            const double delta = zeta * c * std::cos(alpha) / b + omega / 2.0 - 0.25;
+            const double omega =
+                (4.0 * nu - 1.0 - b * b * std::sin(beta) * std::sin(beta) / (a * a)) * c / (2.0 * b * std::cos(beta));
+            const double delta = zeta * c * std::cos(beta) / b + omega / 2.0 - 0.25;
             p.bravais_label = "mC5";
             p.points = {{"G", 0, 0, 0},
                         {"F", nu, nu, omega},
@@ -500,9 +527,9 @@ static KPath kpath_mC(const POSCAR& conv) {
         } else {
             // mC4 (degenerate)
             const double mu = (1.0 + b * b / (a * a)) / 4.0;
-            const double delta = b * c * std::cos(alpha) / (2.0 * a * a);
-            const double zeta = mu - 0.25 + (1.0 - b * std::cos(alpha) / c) / (4.0 * std::sin(alpha) * std::sin(alpha));
-            const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
+            const double delta = b * c * std::cos(beta) / (2.0 * a * a);
+            const double zeta = mu - 0.25 + (1.0 - b * std::cos(beta) / c) / (4.0 * std::sin(beta) * std::sin(beta));
+            const double eta = 0.5 + 2.0 * zeta * c * std::cos(beta) / b;
             const double phi = 1.0 + zeta - 2.0 * mu;
             const double psi = eta - 2.0 * delta;
             p.bravais_label = "mC4";
@@ -528,10 +555,10 @@ static KPath kpath_mC(const POSCAR& conv) {
         }
     } else {
         // mC2 (kgamma == 90°)
-        const double zeta = (2.0 - b * std::cos(alpha) / c) / (4.0 * std::sin(alpha) * std::sin(alpha));
-        const double eta = 0.5 + 2.0 * zeta * c * std::cos(alpha) / b;
-        const double psi = 0.75 - a * a / (4.0 * b * b * std::sin(alpha) * std::sin(alpha));
-        const double phi = psi + (0.75 - psi) * b * std::cos(alpha) / c;
+        const double zeta = (2.0 - b * std::cos(beta) / c) / (4.0 * std::sin(beta) * std::sin(beta));
+        const double eta = 0.5 + 2.0 * zeta * c * std::cos(beta) / b;
+        const double psi = 0.75 - a * a / (4.0 * b * b * std::sin(beta) * std::sin(beta));
+        const double phi = psi + (0.75 - psi) * b * std::cos(beta) / c;
         p.bravais_label = "mC2";
         p.points = {{"G", 0, 0, 0},
                     {"N", 0.5, 0.0, 0.0},
