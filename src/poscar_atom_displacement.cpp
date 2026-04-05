@@ -1,7 +1,6 @@
-#include <CLI/CLI.hpp>
-
 #include <algorithm>
 #include <cctype>
+#include <CLI/CLI.hpp>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -18,7 +17,8 @@ std::vector<std::string> splitCsv(const std::string& text) {
     std::stringstream ss(text);
     std::string item;
     while (std::getline(ss, item, ',')) {
-        item.erase(std::remove_if(item.begin(), item.end(), [](unsigned char c) { return std::isspace(c); }), item.end());
+        item.erase(std::remove_if(item.begin(), item.end(), [](unsigned char c) { return std::isspace(c); }),
+                   item.end());
         if (!item.empty()) {
             out.push_back(item);
         }
@@ -34,7 +34,8 @@ bool parseIndicesSpec(const std::string& spec, int total_atoms, std::set<size_t>
     std::stringstream ss(spec);
     std::string token;
     while (std::getline(ss, token, ',')) {
-        token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char c) { return std::isspace(c); }), token.end());
+        token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char c) { return std::isspace(c); }),
+                    token.end());
         if (token.empty()) {
             continue;
         }
