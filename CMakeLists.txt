@@ -87,9 +87,17 @@ target_link_libraries(poscar_2ctrls PRIVATE vasp_core)
 add_executable(poscar_supercell src/poscar_supercell.cpp)
 target_link_libraries(poscar_supercell PRIVATE vasp_core)
 
+# ===== k-path helper library =====
+add_library(vasp_kpath src/kpath.cpp)
+target_include_directories(vasp_kpath PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(vasp_kpath PUBLIC vasp_spglib)
+
 # ===== spglib utility =====
 add_executable(poscar_symmetry src/poscar_symmetry.cpp)
 target_link_libraries(poscar_symmetry PRIVATE vasp_spglib CLI11::CLI11)
+
+add_executable(poscar_kpath src/poscar_kpath.cpp)
+target_link_libraries(poscar_kpath PRIVATE vasp_kpath CLI11::CLI11)
 
 add_executable(poscar_2primitive src/poscar_2primitive.cpp)
 target_link_libraries(poscar_2primitive PRIVATE vasp_spglib)

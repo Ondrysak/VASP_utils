@@ -15,9 +15,12 @@
 
 void initializeSpglibInput(POSCAR& poscarDirect, double lattice[3][3], std::vector<std::array<double, 3>>& positions,
                            std::vector<int>& types, std::map<std::string, int>& element_map) {
+    // spglib expects column vectors: lattice[i][j] = i-th Cartesian component of j-th basis vector.
+    // POSCAR stores row vectors: poscar.lattice[i][j] = j-th component of i-th vector.
+    // Therefore transpose when copying.
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j)
-            lattice[i][j] = poscarDirect.lattice[i][j];
+            lattice[i][j] = poscarDirect.lattice[j][i];
 
     // Prepare atomic positions as flat vector (num_atoms*3)
     for (int i = 0; i < poscarDirect.total_atoms; ++i) {
@@ -135,10 +138,10 @@ std::optional<POSCAR> standardizeCell(const POSCAR& poscar, const double& sympre
     std_poscar.total_atoms = num_std;
     std_poscar.comment = poscar.comment + (primitive == 1 ? " primitive cell" : " conventional cell");
 
-    // Copy new lattice
+    // spglib returns the lattice in column-vector format; transpose back to POSCAR row-vector format.
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j)
-            std_poscar.lattice[i][j] = lattice[i][j];
+            std_poscar.lattice[i][j] = lattice[j][i];
 
     // Copy positions
     std_poscar.elements.clear();
