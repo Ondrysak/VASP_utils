@@ -99,20 +99,37 @@ static KPath kpath_tP() {
     return p;
 }
 
-// tI:  eta = (1 + c²/a²) / 4   (Setyawan Table 6)
-// a = |lattice[0]|, c = |lattice[2]| of the conventional tetragonal cell.
+// tI: two subcases based on c vs a of the conventional tetragonal cell.
+// Follows HPKOT (Hinuma et al. 2017) / SeeK-path convention.
+// a = |lattice[0]|, c = |lattice[2]|.
+//
+// tI1 (c <= a):  H = (1 + c²/a²) / 4
+// tI2 (c  > a):  H = (1 + a²/c²) / 4,   Z = a² / (2c²)
 static KPath kpath_tI(const POSCAR& conv) {
     const double a = vecnorm(conv.lattice[0]);
     const double c = vecnorm(conv.lattice[2]);
-    const double eta = (1.0 + (c * c) / (a * a)) / 4.0;
+    const double a2 = a * a;
+    const double c2 = c * c;
 
     KPath p;
-    p.bravais_label = "tI";
-    p.points = {
-        {"G", 0, 0, 0},        {"M", -0.5, 0.5, 0.5},       {"N", 0, 0.5, 0}, {"P", 0.25, 0.25, 0.25}, {"X", 0, 0, 0.5},
-        {"Z", eta, eta, -eta}, {"Z1", -eta, 1.0 - eta, eta}};
-    p.segments = {{"G", "X"}, {"X", "M"},  {"M", "G"},  {"G", "Z"}, {"Z", "P"},
-                  {"P", "N"}, {"N", "Z1"}, {"Z1", "M"}, {"X", "P"}};
+    if (c <= a) {
+        // tI1
+        const double H = (1.0 + c2 / a2) / 4.0;
+        p.bravais_label = "tI1";
+        p.points = {{"G", 0, 0, 0},   {"M", -0.5, 0.5, 0.5}, {"N", 0, 0.5, 0},      {"P", 0.25, 0.25, 0.25},
+                    {"X", 0, 0, 0.5}, {"Z", H, H, -H},       {"Z0", -H, 1.0 - H, H}};
+        p.segments = {{"G", "X"}, {"X", "M"}, {"M", "G"}, {"G", "Z"}, {"Z0", "M"}, {"X", "P"}, {"P", "N"}, {"N", "G"}};
+    } else {
+        // tI2
+        const double H = (1.0 + a2 / c2) / 4.0;
+        const double Z = a2 / (2.0 * c2);
+        p.bravais_label = "tI2";
+        p.points = {{"G", 0, 0, 0},          {"M", 0.5, 0.5, -0.5}, {"N", 0, 0.5, 0},
+                    {"P", 0.25, 0.25, 0.25}, {"X", 0, 0, 0.5},      {"S0", -H, H, H},
+                    {"S", H, 1.0 - H, -H},   {"R", -Z, Z, 0.5},     {"Gp", 0.5, 0.5, -Z}};
+        p.segments = {{"G", "X"}, {"X", "P"},  {"P", "N"}, {"N", "G"}, {"G", "M"},
+                      {"M", "S"}, {"S0", "G"}, {"X", "R"}, {"Gp", "M"}};
+    }
     return p;
 }
 
