@@ -582,19 +582,35 @@ static KPath kpath_mC(const POSCAR& conv) {
     return p;
 }
 
-// aP: triclinic — two subcases based on reciprocal lattice angles.
-// TRI1a: all reciprocal angles > 90° (or kgamma >= 90° with kalpha,kbeta > 90°)
-// TRI1b: all reciprocal angles < 90° (or kgamma <= 90° with kalpha,kbeta < 90°)
-static KPath kpath_aP(const POSCAR& conv) {
+// aP: triclinic — two subcases based on reciprocal lattice angles of the
+// input primitive cell.
+//
+// The caller must pass the primitive cell in the orientation that should be
+// used for classification (i.e. the as-read POSCAR, not a spglib
+// re-standardized version).  spglib may return a different P-1 basis than the
+// one committed to by the user or upstream pymatgen, changing the angles.
+//
+// TRI1a: kalpha>90°, kbeta>90°, kgamma≥90°  (pymatgen name "TRI1a")
+// TRI1b: otherwise                           (pymatgen name "TRI1b")
+static KPath kpath_aP(const POSCAR& prim) {
+    double a2xa3[3], a3xa1[3], a1xa2[3];
+    veccross(prim.lattice[1], prim.lattice[2], a2xa3);
+    veccross(prim.lattice[2], prim.lattice[0], a3xa1);
+    veccross(prim.lattice[0], prim.lattice[1], a1xa2);
+    const double V = vecdot(prim.lattice[0], a2xa3);
     double b1[3], b2[3], b3[3];
-    reciprocal_lattice(conv, b1, b2, b3);
-
-    const double kalpha_deg = vecangle(b2, b3) * 180.0 / M_PI;
-    const double kbeta_deg = vecangle(b1, b3) * 180.0 / M_PI;
-    const double kgamma_deg = vecangle(b1, b2) * 180.0 / M_PI;
+    for (int i = 0; i < 3; ++i) {
+        b1[i] = a2xa3[i] / V;
+        b2[i] = a3xa1[i] / V;
+        b3[i] = a1xa2[i] / V;
+    }
+    const double ka = vecangle(b2, b3) * 180.0 / M_PI;
+    const double kb = vecangle(b1, b3) * 180.0 / M_PI;
+    const double kg = vecangle(b1, b2) * 180.0 / M_PI;
+    const bool is_tri1a = (ka > 90.0 && kb > 90.0 && kg >= 90.0);
 
     KPath p;
-    if (kalpha_deg > 90.0 && kbeta_deg > 90.0 && kgamma_deg >= 90.0) {
+    if (is_tri1a) {
         p.bravais_label = "aP1";
         p.points = {{"G", 0, 0, 0},       {"L", 0.5, 0.5, 0.0}, {"M", 0.0, 0.5, 0.5}, {"N", 0.5, 0.0, 0.5},
                     {"R", 0.5, 0.5, 0.5}, {"X", 0.5, 0.0, 0.0}, {"Y", 0.0, 0.5, 0.0}, {"Z", 0.0, 0.0, 0.5}};
@@ -614,7 +630,7 @@ static KPath kpath_aP(const POSCAR& conv) {
 // Public interface
 // ─────────────────────────────────────────────────────────────────────────────
 
-std::optional<KPath> getBravaisKPath(const POSCAR& std_conv, const SpglibDataset& dataset) {
+std::optional<KPath> getBravaisKPath(const POSCAR& std_conv, const POSCAR& std_prim, const SpglibDataset& dataset) {
     const BravaisType bt = detectBravais(dataset.spacegroup_number, dataset.international_symbol);
 
     switch (bt) {
@@ -645,7 +661,7 @@ std::optional<KPath> getBravaisKPath(const POSCAR& std_conv, const SpglibDataset
         case BravaisType::mC:
             return kpath_mC(std_conv);
         case BravaisType::aP:
-            return kpath_aP(std_conv);
+            return kpath_aP(std_prim);  // primitive orientation matches pymatgen
         default:
             return std::nullopt;
     }

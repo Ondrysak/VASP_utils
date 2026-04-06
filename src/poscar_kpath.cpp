@@ -88,6 +88,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Primitive cell — needed for aP subcase detection (reciprocal angle orientation).
+    auto maybe_prim_early = standardizeCell(poscar, symprec, 1, 0);
+    if (!maybe_prim_early) {
+        std::cerr << "Error: spglib could not generate primitive cell.\n";
+        return 1;
+    }
+
     auto dataset = analyzeSymmetry(*maybe_conv, symprec);
     if (!dataset) {
         std::cerr << "Error: spglib symmetry analysis failed.\n";
@@ -96,7 +103,12 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Space group: " << dataset->international_symbol << " (#" << dataset->spacegroup_number << ")\n";
 
-    auto maybe_kpath = getBravaisKPath(*maybe_conv, *dataset);
+    // Pass the input POSCAR (not spglib's re-standardized primitive) as the
+    // orientation reference for aP (P-1) subcase detection.  spglib may choose
+    // a different P-1 basis than pymatgen, which changes the reciprocal-angle
+    // classification; the raw input cell matches the orientation that the user
+    // (or pymatgen upstream) already committed to.
+    auto maybe_kpath = getBravaisKPath(*maybe_conv, poscar, *dataset);
     if (!maybe_kpath) {
         std::cerr << "Error: Bravais lattice type not supported.\n"
                   << "  (international symbol: " << dataset->international_symbol << ")\n"
@@ -113,15 +125,10 @@ int main(int argc, char* argv[]) {
     std::cout << "Written: " << kpointsFile << "\n";
 
     if (!no_prim) {
-        auto maybe_prim = standardizeCell(poscar, symprec, 1, 0);
-        if (!maybe_prim) {
-            std::cerr << "Warning: could not generate primitive cell.\n";
+        if (!maybe_prim_early->writePOSCAR(primFile)) {
+            std::cerr << "Warning: failed to write " << primFile << "\n";
         } else {
-            if (!maybe_prim->writePOSCAR(primFile)) {
-                std::cerr << "Warning: failed to write " << primFile << "\n";
-            } else {
-                std::cout << "Written: " << primFile << " (use this POSCAR for the band structure run)\n";
-            }
+            std::cout << "Written: " << primFile << " (use this POSCAR for the band structure run)\n";
         }
     }
 

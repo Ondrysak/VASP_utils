@@ -61,6 +61,22 @@ struct KPath {
  *
  * @see Setyawan & Curtarolo, Comp. Mat. Sci. 49, 299 (2010).
  */
-std::optional<KPath> getBravaisKPath(const POSCAR& std_conv, const SpglibDataset& dataset);
+/**
+ * @brief Determine the Bravais lattice type and return the corresponding k-path.
+ *
+ * @param std_conv   Standardised conventional cell (primitive=0 from spglib).
+ * @param std_prim   Primitive cell used for reciprocal-angle subcase detection
+ *                   in triclinic (aP).  Should be the as-read POSCAR rather
+ *                   than spglib's re-standardised primitive, because spglib
+ *                   may choose a different P-1 basis that changes the angle
+ *                   classification.
+ * @param dataset    spglib dataset obtained from @p std_conv.
+ */
+std::optional<KPath> getBravaisKPath(const POSCAR& std_conv, const POSCAR& std_prim, const SpglibDataset& dataset);
+
+/// @brief Convenience overload — uses @p std_conv as both conventional and primitive.
+inline std::optional<KPath> getBravaisKPath(const POSCAR& std_conv, const SpglibDataset& dataset) {
+    return getBravaisKPath(std_conv, std_conv, dataset);
+}
 
 #endif  // KPATH_H_INCLUDED
