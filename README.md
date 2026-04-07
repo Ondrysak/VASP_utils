@@ -145,6 +145,10 @@ pre-commit run --hook-stage manual clang-tidy
 
 ----Versions:----
 
+v_0.1.8
+- Added poscar_kpath - Automatic generation of the path among high symmetry points in the Brillouin zone for band structure calculation for all structures.
+- Fixed - Lattice in spglib function is in a different format to POSCAR file, now corrected the calling of spglib functions.
+
 v_0.1.7
 
 - Changed - poscar_d2c, poscar_c2d, poscar_atom_displace, poscar_symmetry migrated to CLI11 argument parsing
