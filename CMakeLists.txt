@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(VaspUtils VERSION 0.1.7 LANGUAGES C CXX)
+project(VaspUtils VERSION 0.1.8 LANGUAGES C CXX)
 
 include(FetchContent)
 
