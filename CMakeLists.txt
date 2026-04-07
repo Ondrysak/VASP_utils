@@ -87,9 +87,17 @@ target_link_libraries(poscar_2ctrls PRIVATE vasp_core)
 add_executable(poscar_supercell src/poscar_supercell.cpp)
 target_link_libraries(poscar_supercell PRIVATE vasp_core)
 
+# ===== k-path helper library =====
+add_library(vasp_kpath src/kpath.cpp)
+target_include_directories(vasp_kpath PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(vasp_kpath PUBLIC vasp_spglib)
+
 # ===== spglib utility =====
 add_executable(poscar_symmetry src/poscar_symmetry.cpp)
 target_link_libraries(poscar_symmetry PRIVATE vasp_spglib CLI11::CLI11)
+
+add_executable(poscar_kpath src/poscar_kpath.cpp)
+target_link_libraries(poscar_kpath PRIVATE vasp_kpath CLI11::CLI11)
 
 add_executable(poscar_2primitive src/poscar_2primitive.cpp)
 target_link_libraries(poscar_2primitive PRIVATE vasp_spglib)
@@ -123,3 +131,28 @@ target_compile_definitions(vasp_tests PRIVATE
 )
 
 gtest_discover_tests(vasp_tests)
+
+add_executable(vasp_kpath_tests
+    tests/test_kpath.cpp
+)
+
+target_link_libraries(vasp_kpath_tests PRIVATE vasp_kpath GTest::gtest_main)
+
+gtest_discover_tests(vasp_kpath_tests)
+
+# ===== Documentation (Doxygen) =====
+find_package(Doxygen OPTIONAL_COMPONENTS dot)
+if(DOXYGEN_FOUND)
+    set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/docs)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in
+                   ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Generating HTML documentation with Doxygen"
+        VERBATIM
+    )
+    message(STATUS "Doxygen found — build the 'docs' target to generate documentation")
+else()
+    message(STATUS "Doxygen not found — 'docs' target unavailable")
+endif()
