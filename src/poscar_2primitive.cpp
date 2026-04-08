@@ -1,7 +1,6 @@
-#include "poscar_2primitive.h"
-
 #include <spglib.h>
 
+#include <CLI/CLI.hpp>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -10,97 +9,32 @@
 #include "poscar_file.h"
 #include "symmetry.h"
 
-bool readInput(int argc, char* argv[], std::string& inputFile, std::string& outputFile, double& symprec,
-               int& idealize) {
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-
-        if (arg == "--help") {
-            printHelp();
-            return false;
-        } else if (arg == "--input") {
-            if (i + 1 >= argc)
-                return false;
-            inputFile = argv[++i];
-        } else if (arg == "--output") {
-            if (i + 1 >= argc)
-                return false;
-            outputFile = argv[++i];
-        } else if (arg == "--symprec") {
-            if (i + 1 >= argc)
-                return false;
-            try {
-                symprec = std::stod(argv[++i]);
-            } catch (...) {
-                return false;
-            }
-        } else if (arg == "--idealize") {
-            idealize = 1;
-        } else {
-            std::cerr << "Warning: unknown argument! Ignoring it!\n";
-            printHelp();
-        }
-    }
-    return true;
-}
-
-bool validateInput(const std::string& inputFile, const std::string& outputFile, double& symprec) {
-    std::ifstream file(inputFile);
-    if (!file) {
-        std::cerr << "Error: cannot open file " << inputFile << "\n";
-        return false;
-    }
-    std::ifstream file_2(outputFile);
-    if (file_2) {
-        std::cerr << "Warning: output file " << outputFile << " already exists!!! Will be overwritten!!!\n";
-    }
-    if (symprec < 0) {
-        std::cerr << "Error: symprec cannot be negative!!!\n";
-        return false;
-    }
-    if (symprec == 0) {
-        std::cerr << "Error: symprec cannot be 0!!!\n";
-        return false;
-    }
-    if (symprec > 1e-3) {
-        std::cerr << "Warning: symprec is too high! Consider using default value 1e-5.\n";
-    }
-
-    return true;
-}
-
-void printHelp() {
-    std::cerr << "Usage:\n"
-                 "  poscar_2primitive [options]\n\n"
-                 "Options:\n"
-                 "  --input      input POSCAR file name (default: POSCAR)\n"
-                 "  --symprec    symmetry tolerance (spglib symprec) (default: 1e-5)\n"
-                 "  --output     output POSCAR file name (used with --primitive) (default: POSCAR_primitive)\n"
-                 "  --idealize   idealize the unit cell structure\n"
-                 "  --help       show this help message\n\n"
-                 "Example:\n"
-                 "  poscar_2primitive --input POSCARin --symprec 1e-5 --outpur POSCARout\n";
-}
-
 int main(int argc, char* argv[]) {
+    CLI::App app{"Transform POSCAR structure to primitive cell using spglib"};
+
     std::string inputFile{"POSCAR"};
     std::string outputFile{"POSCAR_primitive"};
     double symprec{1e-5};
     const int primitive{1};
     int idealize{0};
 
-    if (!readInput(argc, argv, inputFile, outputFile, symprec, idealize)) {
-        return 1;
-    }
+    app.add_option("--input,-i", inputFile, "Input POSCAR file")->capture_default_str()->check(CLI::ExistingFile);
+    app.add_option("--output,-o", outputFile, "Output POSCAR file")->capture_default_str();
+    app.add_option("--symprec", symprec, "Symmetry tolerance (spglib symprec)")
+        ->capture_default_str()
+        ->check(CLI::PositiveNumber);
+    app.add_flag("--idealize", idealize, "Idealize the primitive cell");
 
-    if (!validateInput(inputFile, outputFile, symprec)) {
-        return 1;
+    CLI11_PARSE(app, argc, argv);
+
+    if (symprec > 1e-3) {
+        std::cerr << "Warning: symprec is too high! Consider using default value 1e-5.\n";
     }
 
     POSCAR poscar;
 
     if (!poscar.readPOSCAR(inputFile)) {
-        std::cerr << "Error: reading POSCAR file " << inputFile << "\n";
+        std::cerr << "Error: failed to parse input POSCAR " << inputFile << "\n";
         return 1;
     }
 
