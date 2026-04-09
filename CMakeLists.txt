@@ -75,6 +75,12 @@ target_link_libraries(vasp_spglib PUBLIC Spglib::symspg vasp_core)
 add_executable(poscar_atom_displace src/poscar_atom_displacement.cpp)
 target_link_libraries(poscar_atom_displace PRIVATE vasp_core CLI11::CLI11)
 
+add_executable(poscar_elastic_deformations src/poscar_elastic_deformations.cpp)
+target_link_libraries(poscar_elastic_deformations PRIVATE vasp_core CLI11::CLI11)
+
+add_executable(poscar_elastic_fit src/poscar_elastic_fit.cpp)
+target_link_libraries(poscar_elastic_fit PRIVATE vasp_core CLI11::CLI11)
+
 add_executable(poscar_d2c src/poscar_d2c.cpp)
 target_link_libraries(poscar_d2c PRIVATE vasp_core CLI11::CLI11)
 

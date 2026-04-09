@@ -8,12 +8,15 @@ Still under development. Currently, these utilities for POSCAR file manipulation
 - poscar_2conventional - create conventional cell
 - poscar_2ctrls - create ctrls file for ecalj/Questaal package from POSCAR
 - poscar_atom_displace - randomly displace atoms
+- poscar_kpath - for automatic generation of path in the Brillouin zone for band structure calculation
+- poscar_elastic_deformations - generate a pymatgen-style set of deformed POSCAR files for elastic constants fitting
+- poscar_elastic_fit - fit elastic constant tensor Cij from VASP OUTCAR files (stress or energy method)
 
 For now, the code is as it is; nothing is guaranteed.
 
 ----Plans:----
 
-Deformation generator for elastic constants calculation.
+(Implemented) Deformation generator for elastic constants calculation.
 
 ----Installation:----
 
@@ -77,6 +80,41 @@ poscar_atom_displace --indices 1,3-8 --natoms 4 --ampx 0.03 --ampy 0.01 --ampz 0
 # Apply perturbation with zero net translation correction
 poscar_atom_displace --allatoms --zero-net --amp 0.015
 ```
+
+
+**poscar_elastic_deformations** — Generate pymatgen-like independent strain deformation set
+```
+poscar_elastic_deformations [--input/-i <file>] [--output-prefix/-o <prefix>] [--manifest/-m <csv>]
+                            [--norm-strains <list>] [--shear-strains <list>]
+```
+Defaults:
+- input `POSCAR`
+- output prefix `POSCAR_def`
+- manifest `elastic_deformations.csv`
+- normal strains `-0.01,-0.005,0.005,0.01`
+- shear strains `-0.06,-0.03,0.03,0.06`
+
+This follows pymatgen's `DeformedStructureSet` idea (normal modes `e11,e22,e33`; shear modes `e12,e13,e23`) and uses an upper-triangular deformation gradient from Cholesky factorization of `F^T F = I + 2E`.
+
+**poscar_elastic_fit** — Fit elastic constants from VASP OUTCAR files
+```
+poscar_elastic_fit [--manifest/-m <csv>] [--outcar-dir/-d <dir>] [--method stress|energy]
+                   [--volume/-V <float>] [--output/-o <file>] [--negate-stress]
+```
+Defaults:
+- manifest `elastic_deformations.csv`
+- outcar-dir `.`
+- method `stress`
+- output `elastic_constants.txt`
+
+OUTCARs are located as `<outcar-dir>/<name>/OUTCAR` or `<outcar-dir>/<name>.OUTCAR` where `<name>` matches the POSCAR filename in the manifest.
+
+| Method | Description |
+|---|---|
+| `stress` | Linear regression σ = C·ε over all deformations. Gives full 6×6 Cij. Requires `ISIF >= 2` in INCAR. |
+| `energy` | Parabolic fit E = a₀ + a₁ε + a₂ε² per strain mode. Gives diagonal Cii only. |
+
+The output `elastic_constants.txt` is a plain 6×6 matrix in GPa (Voigt notation: rows/cols ordered 11 22 33 23 13 12).
 
 **poscar_symmetry** — Symmetry analysis using spglib
 ```
