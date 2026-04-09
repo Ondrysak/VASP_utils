@@ -9,12 +9,13 @@ Still under development. Currently, these utilities for POSCAR file manipulation
 - poscar_2ctrls - create ctrls file for ecalj/Questaal package from POSCAR
 - poscar_atom_displace - randomly displace atoms
 - poscar_kpath - for automatic generation of path in the Brillouin zone for band structure calculation
+- poscar_elastic_deformations - generate a pymatgen-style set of deformed POSCAR files for elastic constants fitting
 
 For now, the code is as it is; nothing is guaranteed.
 
 ----Plans:----
 
-Deformation generator for elastic constants calculation.
+(Implemented) Deformation generator for elastic constants calculation.
 
 ----Installation:----
 
@@ -78,6 +79,21 @@ poscar_atom_displace --indices 1,3-8 --natoms 4 --ampx 0.03 --ampy 0.01 --ampz 0
 # Apply perturbation with zero net translation correction
 poscar_atom_displace --allatoms --zero-net --amp 0.015
 ```
+
+
+**poscar_elastic_deformations** — Generate pymatgen-like independent strain deformation set
+```
+poscar_elastic_deformations [--input/-i <file>] [--output-prefix/-o <prefix>] [--manifest/-m <csv>]
+                            [--norm-strains <list>] [--shear-strains <list>]
+```
+Defaults:
+- input `POSCAR`
+- output prefix `POSCAR_def`
+- manifest `elastic_deformations.csv`
+- normal strains `-0.01,-0.005,0.005,0.01`
+- shear strains `-0.06,-0.03,0.03,0.06`
+
+This follows pymatgen's `DeformedStructureSet` idea (normal modes `e11,e22,e33`; shear modes `e12,e13,e23`) and uses an upper-triangular deformation gradient from Cholesky factorization of `F^T F = I + 2E`.
 
 **poscar_symmetry** — Symmetry analysis using spglib
 ```

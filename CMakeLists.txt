@@ -87,6 +87,9 @@ target_link_libraries(poscar_2ctrls PRIVATE vasp_core CLI11::CLI11)
 add_executable(poscar_supercell src/poscar_supercell.cpp)
 target_link_libraries(poscar_supercell PRIVATE vasp_core CLI11::CLI11)
 
+add_executable(poscar_elastic_deformations src/poscar_elastic_deformations.cpp)
+target_link_libraries(poscar_elastic_deformations PRIVATE vasp_core CLI11::CLI11)
+
 # ===== k-path helper library =====
 add_library(vasp_kpath src/kpath.cpp)
 target_include_directories(vasp_kpath PUBLIC ${PROJECT_SOURCE_DIR}/include)
