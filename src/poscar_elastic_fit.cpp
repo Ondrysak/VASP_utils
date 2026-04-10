@@ -12,9 +12,10 @@
 #include <string>
 #include <vector>
 
+#include "elastic_utils.h"
+
 namespace {
 
-static constexpr double kBar_to_GPa = 0.1;
 static constexpr double eV_per_A3_to_GPa = 160.21766208;
 
 struct DeformRecord {
@@ -117,18 +118,6 @@ bool parseOutcarEnergy(const std::string& path, double& energy_ev) {
     return found;
 }
 
-// VASP [XX, YY, ZZ, XY, YZ, ZX] kBar → Voigt [11, 22, 33, 23, 13, 12] GPa
-// VASP index:  0    1    2    3    4    5
-// Voigt index: 0    1    2    5    3    4   (reorder 23←4, 13←5, 12←3)
-std::array<double, 6> vaspStressToVoigt(const std::array<double, 6>& kb, double sign) {
-    return {sign * kb[0] * kBar_to_GPa,   // 11 = XX
-            sign * kb[1] * kBar_to_GPa,   // 22 = YY
-            sign * kb[2] * kBar_to_GPa,   // 33 = ZZ
-            sign * kb[4] * kBar_to_GPa,   // 23 = YZ
-            sign * kb[5] * kBar_to_GPa,   // 13 = ZX
-            sign * kb[3] * kBar_to_GPa};  // 12 = XY
-}
-
 void printMatrix(const std::array<std::array<double, 6>, 6>& C, std::ostream& os) {
     static const char* lbl[] = {"11", "22", "33", "23", "13", "12"};
     os << std::fixed << std::setprecision(3);
@@ -156,6 +145,7 @@ int main(int argc, char* argv[]) {
     std::string output_file{"elastic_constants.txt"};
     double volume{0.0};
     bool negate_stress{false};
+    bool quartic{false};
 
     app.add_option("--manifest,-m", manifest_file, "Manifest CSV from poscar_elastic_deformations")
         ->capture_default_str()
@@ -170,6 +160,10 @@ int main(int argc, char* argv[]) {
     app.add_option("--volume,-V", volume, "Reference cell volume in Å³ (required for energy method)");
     app.add_option("--output,-o", output_file, "Output text file")->capture_default_str();
     app.add_flag("--negate-stress", negate_stress, "Negate VASP stress values (use if fitted Cij have wrong sign)");
+    app.add_flag("--quartic", quartic,
+                 "Energy method: extend polynomial to degree 4 (1 + ε + ε² + ε³ + ε⁴). "
+                 "Improves convergence when higher-order elastic effects are present. "
+                 "Requires at least 5 data points per mode (recommend ≥9).");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -181,6 +175,15 @@ int main(int argc, char* argv[]) {
     std::cout << "Loaded " << records.size() << " deformation records from " << manifest_file << ".\n";
 
     std::array<std::array<double, 6>, 6> C{};
+
+    // Minimum point recommendations from lusta-cz:
+    //   stress method  : ≥ 5 points total is enough for a well-conditioned fit
+    //   energy quadratic: ≥ 7 points per mode recommended
+    //   energy quartic  : ≥ 9 points per mode recommended (must have > 5 for unique fit)
+    if (method == "stress" && static_cast<int>(records.size()) < 5) {
+        std::cerr << "Warning: only " << records.size()
+                  << " deformation records found; the stress fit is under-determined below 5.\n";
+    }
 
     // ---- stress method: linear regression σ = C·ε ----
     if (method == "stress") {
@@ -203,7 +206,7 @@ int main(int argc, char* argv[]) {
                           << "  Make sure ISIF >= 2 is set in INCAR.\n";
                 return 1;
             }
-            const auto sv = vaspStressToVoigt(stress_kb, sign);
+            const auto sv = elasticVaspStressToVoigt(stress_kb, sign);
             for (int c = 0; c < 6; ++c) {
                 A[r * 6 + c] = records[r].strain_voigt[c];
                 B[r * 6 + c] = sv[c];
@@ -226,7 +229,9 @@ int main(int argc, char* argv[]) {
                 C[i][j] = C[j][i] = s;
             }
 
-        // ---- energy method: parabolic fit E = a₀ + a₁ε + a₂ε² per mode ----
+        // ---- energy method: polynomial fit per mode ----
+        // quadratic: E = a₀ + a₁ε + a₂ε²          Cii = 2·a₂/V₀
+        // quartic:   E = a₀ + a₁ε + a₂ε² + a₃ε³ + a₄ε⁴   Cii = 2·a₂/V₀
     } else {
         if (volume <= 0.0) {
             std::cerr << "Error: --volume <Å³> is required for the energy method.\n";
@@ -234,6 +239,10 @@ int main(int argc, char* argv[]) {
         }
         static const std::map<std::string, int> modeVi = {{"e11", 0}, {"e22", 1}, {"e33", 2},
                                                           {"e23", 3}, {"e13", 4}, {"e12", 5}};
+
+        const int nCoeffs = quartic ? 5 : 3;
+        const int minPts = quartic ? 5 : 3;  // absolute minimum for a unique fit
+        const int recPts = quartic ? 9 : 7;  // recommended for a well-converged fit
 
         std::map<std::string, std::vector<std::pair<double, double>>> data;
         for (const auto& rec : records) {
@@ -258,20 +267,26 @@ int main(int argc, char* argv[]) {
         for (const auto& [mode, pts] : data) {
             const int vi = modeVi.at(mode);
             const int N = static_cast<int>(pts.size());
-            std::vector<double> Av(N * 3), bv(N);
-            for (int r = 0; r < N; ++r) {
-                const double eps = pts[r].first;
-                Av[r * 3 + 0] = 1.0;
-                Av[r * 3 + 1] = eps;
-                Av[r * 3 + 2] = eps * eps;
-                bv[r] = pts[r].second;
-            }
-            if (LAPACKE_dgels(LAPACK_ROW_MAJOR, 'N', N, 3, 1, Av.data(), 3, bv.data(), 1) != 0) {
-                std::cerr << "Error: polynomial fit failed for mode " << mode << "\n";
+            if (N < minPts) {
+                std::cerr << "Error: mode " << mode << " has only " << N << " data points; need at least " << minPts
+                          << " for a " << (quartic ? "quartic" : "quadratic") << " fit.\n";
                 return 1;
             }
-            // Cii = 2·a₂ / V₀  (eV/Å³ → GPa)
-            C[vi][vi] = 2.0 * bv[2] / volume * eV_per_A3_to_GPa;
+            if (N < recPts) {
+                std::cerr << "Warning: mode " << mode << " has " << N << " data points; " << recPts
+                          << " are recommended for a well-converged " << (quartic ? "quartic" : "quadratic")
+                          << " fit.\n";
+            }
+
+            std::vector<double> coeffs;
+            try {
+                coeffs = elasticFitPolynomial(pts, nCoeffs - 1);
+            } catch (const std::exception& ex) {
+                std::cerr << "Error: polynomial fit failed for mode " << mode << ": " << ex.what() << "\n";
+                return 1;
+            }
+            // Cii = 2·a₂ / V₀  (eV/Å³ → GPa); coefficient index 2 in both cases
+            C[vi][vi] = 2.0 * coeffs[2] / volume * eV_per_A3_to_GPa;
         }
         std::cout << "Note: energy method gives diagonal Cii only.\n"
                   << "      Off-diagonal Cij require mixed-strain deformations.\n";

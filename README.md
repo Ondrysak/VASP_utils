@@ -82,37 +82,45 @@ poscar_atom_displace --allatoms --zero-net --amp 0.015
 ```
 
 
-**poscar_elastic_deformations** — Generate pymatgen-like independent strain deformation set
+**poscar_elastic_deformations** — Generate independent strain deformation set for elastic constant calculations
 ```
 poscar_elastic_deformations [--input/-i <file>] [--output-prefix/-o <prefix>] [--manifest/-m <csv>]
-                            [--norm-strains <list>] [--shear-strains <list>]
+                            [--norm-strains <list>] [--shear-strains <list>] [--symmetric]
 ```
-Defaults:
-- input `POSCAR`
-- output prefix `POSCAR_def`
-- manifest `elastic_deformations.csv`
-- normal strains `-0.01,-0.005,0.005,0.01`
-- shear strains `-0.06,-0.03,0.03,0.06`
 
-This follows pymatgen's `DeformedStructureSet` idea (normal modes `e11,e22,e33`; shear modes `e12,e13,e23`) and uses an upper-triangular deformation gradient from Cholesky factorization of `F^T F = I + 2E`.
+| Option | Default | Description |
+|---|---|---|
+| `--input/-i` | `POSCAR` | Input POSCAR file |
+| `--output-prefix/-o` | `POSCAR_def` | Prefix for generated POSCAR files |
+| `--manifest/-m` | `elastic_deformations.csv` | CSV metadata file (input for `poscar_elastic_fit`) |
+| `--norm-strains` | `-0.01,-0.005,0.005,0.01` | Normal strain amplitudes (e11, e22, e33) |
+| `--shear-strains` | `-0.01,-0.005,0.005,0.01` | Shear strain amplitudes (e12, e13, e23) |
+| `--symmetric` | off | Use symmetric F = sqrt(I+2E) instead of upper-triangular (Cholesky). Recommended when lattice orientation relative to spin must be preserved. |
+
+Amplitudes above 1% trigger a warning; above 5% the run is aborted. For the energy method at least 7 points per mode are recommended — supply more via `--norm-strains`/`--shear-strains`.
+
+Six independent strain modes are generated (3 normal + 3 shear). The deformation gradient satisfies `F^T F = I + 2E`.
 
 **poscar_elastic_fit** — Fit elastic constants from VASP OUTCAR files
 ```
 poscar_elastic_fit [--manifest/-m <csv>] [--outcar-dir/-d <dir>] [--method stress|energy]
-                   [--volume/-V <float>] [--output/-o <file>] [--negate-stress]
+                   [--volume/-V <float>] [--output/-o <file>] [--negate-stress] [--quartic]
 ```
-Defaults:
-- manifest `elastic_deformations.csv`
-- outcar-dir `.`
-- method `stress`
-- output `elastic_constants.txt`
 
-OUTCARs are located as `<outcar-dir>/<name>/OUTCAR` or `<outcar-dir>/<name>.OUTCAR` where `<name>` matches the POSCAR filename in the manifest.
+| Option | Default | Description |
+|---|---|---|
+| `--manifest/-m` | `elastic_deformations.csv` | Manifest CSV from `poscar_elastic_deformations` |
+| `--outcar-dir/-d` | `.` | Root dir; OUTCARs looked up as `<dir>/<name>/OUTCAR` or `<dir>/<name>.OUTCAR` |
+| `--method` | `stress` | Fitting method (see table below) |
+| `--volume/-V` | — | Reference cell volume in Å³ (required for energy method) |
+| `--output/-o` | `elastic_constants.txt` | Output file |
+| `--negate-stress` | off | Negate VASP stress values (use if fitted Cij have wrong sign) |
+| `--quartic` | off | Energy method: extend polynomial to degree 4 (1+ε+ε²+ε³+ε⁴). Improves accuracy when higher-order elastic effects are present; requires ≥5 points per mode (recommend ≥9). |
 
 | Method | Description |
 |---|---|
-| `stress` | Linear regression σ = C·ε over all deformations. Gives full 6×6 Cij. Requires `ISIF >= 2` in INCAR. |
-| `energy` | Parabolic fit E = a₀ + a₁ε + a₂ε² per strain mode. Gives diagonal Cii only. |
+| `stress` | Linear regression σ = C·ε over all deformations. Gives full 6×6 Cij. Requires `ISIF >= 2` in INCAR. ≥5 data points total recommended. |
+| `energy` | Polynomial fit E = a₀ + a₁ε + a₂ε² (+ a₃ε³ + a₄ε⁴ with `--quartic`) per mode. Gives diagonal Cii only. ≥7 points per mode recommended (≥9 for quartic). |
 
 The output `elastic_constants.txt` is a plain 6×6 matrix in GPa (Voigt notation: rows/cols ordered 11 22 33 23 13 12).
 

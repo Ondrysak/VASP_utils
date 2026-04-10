@@ -127,6 +127,7 @@ add_executable(vasp_tests
     tests/test_poscar_io.cpp
     tests/test_coordinate_conversion.cpp
     tests/test_displacement.cpp
+    tests/test_elastic.cpp
 )
 
 target_link_libraries(vasp_tests PRIVATE vasp_core GTest::gtest_main)
