@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(VaspUtils VERSION 0.1.7 LANGUAGES C CXX)
+project(VaspUtils VERSION 0.1.9 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -88,10 +88,10 @@ add_executable(poscar_c2d src/poscar_c2d.cpp)
 target_link_libraries(poscar_c2d PRIVATE vasp_core CLI11::CLI11)
 
 add_executable(poscar_2ctrls src/poscar_2ctrls.cpp)
-target_link_libraries(poscar_2ctrls PRIVATE vasp_core)
+target_link_libraries(poscar_2ctrls PRIVATE vasp_core CLI11::CLI11)
 
 add_executable(poscar_supercell src/poscar_supercell.cpp)
-target_link_libraries(poscar_supercell PRIVATE vasp_core)
+target_link_libraries(poscar_supercell PRIVATE vasp_core CLI11::CLI11)
 
 # ===== k-path helper library =====
 add_library(vasp_kpath src/kpath.cpp)
@@ -106,10 +106,10 @@ add_executable(poscar_kpath src/poscar_kpath.cpp)
 target_link_libraries(poscar_kpath PRIVATE vasp_kpath CLI11::CLI11)
 
 add_executable(poscar_2primitive src/poscar_2primitive.cpp)
-target_link_libraries(poscar_2primitive PRIVATE vasp_spglib)
+target_link_libraries(poscar_2primitive PRIVATE vasp_spglib CLI11::CLI11)
 
 add_executable(poscar_2conventional src/poscar_2conventional.cpp)
-target_link_libraries(poscar_2conventional PRIVATE vasp_spglib)
+target_link_libraries(poscar_2conventional PRIVATE vasp_spglib CLI11::CLI11)
 
 # ===== Tests (GoogleTest) =====
 FetchContent_Declare(

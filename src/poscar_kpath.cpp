@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
     std::string kpointsFile{"KPOINTS"};
     std::string primFile{"POSCAR_prim"};
     double symprec{1e-5};
-    int nkpts{20};
+    int nkpts{41};
     bool no_prim{false};
 
     app.add_option("--input,-i", inputFile, "Input POSCAR file")->capture_default_str()->check(CLI::ExistingFile);
