@@ -1,0 +1,53 @@
+[package]
+name = "vasp-utils"
+version = "0.1.0"
+edition = "2021"
+description = "VASP crystal structure utilities — Rust rewrite"
+
+[lib]
+name = "vasp_utils"
+path = "src/lib.rs"
+
+[[bin]]
+name = "poscar_d2c"
+path = "src/bin/poscar_d2c.rs"
+
+[[bin]]
+name = "poscar_c2d"
+path = "src/bin/poscar_c2d.rs"
+
+[[bin]]
+name = "poscar_atom_displace"
+path = "src/bin/poscar_atom_displace.rs"
+
+[[bin]]
+name = "poscar_symmetry"
+path = "src/bin/poscar_symmetry.rs"
+
+[[bin]]
+name = "poscar_kpath"
+path = "src/bin/poscar_kpath.rs"
+
+[[bin]]
+name = "poscar_2primitive"
+path = "src/bin/poscar_2primitive.rs"
+
+[[bin]]
+name = "poscar_2conventional"
+path = "src/bin/poscar_2conventional.rs"
+
+[[bin]]
+name = "poscar_supercell"
+path = "src/bin/poscar_supercell.rs"
+
+[[bin]]
+name = "poscar_2ctrls"
+path = "src/bin/poscar_2ctrls.rs"
+
+[dependencies]
+faer          = "0.19"
+clap          = { version = "4", features = ["derive"] }
+rand          = "0.8"
+
+[build-dependencies]
+pkg-config = "0.3"
