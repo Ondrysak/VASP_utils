@@ -32,8 +32,7 @@ fn main() {
         }
     };
 
-    let idealize = if cli.idealize { 1 } else { 0 };
-    match standardize_cell(&poscar, cli.symprec, 1, idealize) {
+    match standardize_cell(&poscar, cli.symprec, true, cli.idealize) {
         Some(prim) => {
             if let Err(e) = prim.write(&cli.output) {
                 eprintln!("{e}");

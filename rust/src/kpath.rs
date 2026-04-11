@@ -6,7 +6,7 @@
 //! the centering letter of the international symbol.
 
 use crate::poscar::Poscar;
-use crate::symmetry::SpglibDataset;
+use spglib::dataset::Dataset;
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -623,10 +623,9 @@ fn kpath_ap(prim: &Poscar) -> KPath {
 pub fn get_bravais_kpath(
     std_conv: &Poscar,
     std_prim: &Poscar,
-    dataset: &SpglibDataset,
+    dataset: &Dataset,
 ) -> Option<KPath> {
-    let intl = crate::symmetry::spglib_intl_symbol(dataset);
-    let bravais = detect_bravais(dataset.spacegroup_number, &intl)?;
+    let bravais = detect_bravais(dataset.spacegroup_number, &dataset.international_symbol)?;
 
     Some(match bravais {
         Bravais::CP => kpath_cp(),

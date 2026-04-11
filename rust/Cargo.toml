@@ -45,9 +45,8 @@ name = "poscar_2ctrls"
 path = "src/bin/poscar_2ctrls.rs"
 
 [dependencies]
-faer          = "0.19"
-clap          = { version = "4", features = ["derive"] }
-rand          = "0.8"
-
-[build-dependencies]
-pkg-config = "0.3"
+faer       = "0.19"
+clap       = { version = "4", features = ["derive"] }
+rand       = "0.8"
+spglib     = "1.15.1"
+spglib-sys = "1"     # used directly in symmetry::standardize_cell

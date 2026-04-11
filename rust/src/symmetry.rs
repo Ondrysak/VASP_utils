@@ -1,135 +1,52 @@
-//! Spglib FFI bindings and high-level wrapper functions for symmetry analysis
-//! and cell standardisation.
+//! Symmetry analysis and cell standardisation via the [`spglib`] Rust crate.
+//!
+//! [`spglib::dataset::Dataset`] is re-exported as the primary result type so
+//! callers do not need a direct dependency on the `spglib` crate.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::ffi::{c_char, CStr};
 use std::os::raw::c_int;
+
+use spglib::cell::Cell;
+pub use spglib::dataset::Dataset;
+use spglib_sys as ffi;
 
 use crate::poscar::{Atom, Poscar};
 
-// ─── Spglib FFI ───────────────────────────────────────────────────────────────
-//
-// Bindings for spglib 2.x (tested against 2.3.0).
-// The struct layout must exactly match spglib.h; #[repr(C)] ensures that Rust
-// follows the same alignment / padding rules as the C compiler.
+// ─── Internal helpers ─────────────────────────────────────────────────────────
 
-/// Raw spglib dataset, heap-allocated by `spg_get_dataset`.
+/// Build the spglib `Cell` from a POSCAR that is already in fractional
+/// coordinates.  Also returns the element → integer-type mapping so callers
+/// can reconstruct element names from type ids.
 ///
-/// Access through [`SpglibDatasetGuard`] which frees it on drop.
-#[repr(C)]
-pub struct SpglibDataset {
-    pub spacegroup_number: c_int,
-    pub hall_number: c_int,
-    pub international_symbol: [c_char; 11],
-    pub hall_symbol: [c_char; 17],
-    pub choice: [c_char; 6],
-    pub transformation_matrix: [[f64; 3]; 3],
-    pub origin_shift: [f64; 3],
-    pub n_operations: c_int,
-    pub rotations: *mut [[c_int; 3]; 3],
-    pub translations: *mut [f64; 3],
-    pub n_atoms: c_int,
-    pub wyckoffs: *mut c_int,
-    pub site_symmetry_symbols: *mut [c_char; 7],
-    pub equivalent_atoms: *mut c_int,
-    pub crystallographic_orbits: *mut c_int,
-    pub primitive_lattice: [[f64; 3]; 3],
-    pub mapping_to_primitive: *mut c_int,
-    pub n_std_atoms: c_int,
-    pub std_lattice: [[f64; 3]; 3],
-    pub std_types: *mut c_int,
-    pub std_positions: *mut [f64; 3],
-    pub std_rotation_matrix: [[f64; 3]; 3],
-    pub std_mapping_to_primitive: *mut c_int,
-    pub pointgroup_symbol: [c_char; 7],
-}
-
-extern "C" {
-    /// Perform full symmetry analysis and return a heap-allocated dataset.
-    /// Returns null on failure.
-    fn spg_get_dataset(
-        lattice: *const [f64; 3],
-        position: *const [f64; 3],
-        types: *const c_int,
-        num_atom: c_int,
-        symprec: f64,
-    ) -> *mut SpglibDataset;
-
-    /// Free a dataset previously returned by `spg_get_dataset`.
-    fn spg_free_dataset(dataset: *mut SpglibDataset);
-
-    /// Standardise a cell (primitive or conventional) in-place.
-    /// Returns the number of atoms in the output cell, or ≤ 0 on failure.
-    fn spg_standardize_cell(
-        lattice: *mut [f64; 3],
-        position: *mut [f64; 3],
-        types: *mut c_int,
-        num_atom: c_int,
-        to_primitive: c_int,
-        no_idealize: c_int,
-        symprec: f64,
-    ) -> c_int;
-}
-
-// ─── RAII guard ───────────────────────────────────────────────────────────────
-
-/// Owns a `*mut SpglibDataset` and calls `spg_free_dataset` on drop.
-pub struct SpglibDatasetGuard(*mut SpglibDataset);
-
-impl SpglibDatasetGuard {
-    /// Returns `None` if the pointer is null.
-    fn new(ptr: *mut SpglibDataset) -> Option<Self> {
-        if ptr.is_null() { None } else { Some(Self(ptr)) }
-    }
-
-    pub fn get(&self) -> &SpglibDataset {
-        unsafe { &*self.0 }
-    }
-}
-
-impl Drop for SpglibDatasetGuard {
-    fn drop(&mut self) {
-        unsafe { spg_free_dataset(self.0) }
-    }
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/// Helper: read a null-terminated `[c_char; N]` as a `String`.
-fn cchar_to_string(chars: &[c_char]) -> String {
-    // Safety: spglib guarantees null-termination within the fixed-size array.
-    unsafe { CStr::from_ptr(chars.as_ptr()).to_string_lossy().into_owned() }
-}
-
-/// Transpose POSCAR row-vector lattice → spglib column-vector layout,
-/// build flat position arrays, and map element symbols to integer type ids.
-///
-/// Returns `(spg_lattice, positions, types, element_map)`.
-fn prepare_spglib_input(
-    poscar: &Poscar,
-) -> ([[f64; 3]; 3], Vec<[f64; 3]>, Vec<c_int>, BTreeMap<String, c_int>) {
-    // spglib wants column vectors: spg[i][j] = i-th Cartesian component of j-th vector.
-    // POSCAR row vectors: poscar.lattice[i][j] = j-th component of i-th vector.
-    let mut spg_lat = [[0.0f64; 3]; 3];
+/// spglib uses **column** vectors (`lat[i][j]` = i-th Cartesian component of
+/// the j-th basis vector), whereas POSCAR uses **row** vectors, so we
+/// transpose here.
+fn poscar_to_cell(poscar: &Poscar) -> (Cell, BTreeMap<String, i32>) {
+    let mut lat = [[0.0f64; 3]; 3];
     for i in 0..3 {
         for j in 0..3 {
-            spg_lat[i][j] = poscar.lattice[j][i];
+            lat[i][j] = poscar.lattice[j][i];
         }
     }
 
-    let n = poscar.total_atoms as usize;
-    let mut positions = vec![[0.0f64; 3]; n];
-    for (i, atom) in poscar.coordinates.iter().enumerate() {
-        positions[i] = [atom.x, atom.y, atom.z];
-    }
+    let positions: Vec<[f64; 3]> = poscar
+        .coordinates
+        .iter()
+        .map(|a| [a.x, a.y, a.z])
+        .collect();
 
-    let mut element_map: BTreeMap<String, c_int> = BTreeMap::new();
-    let mut types = vec![0i32; n];
-    let mut counter: c_int = 1;
-    let mut idx = 0usize;
+    let (types, element_map) = build_types(poscar);
+    (Cell::new(&lat, &positions, &types), element_map)
+}
+
+/// Assign a unique integer type id to each distinct element symbol.
+fn build_types(poscar: &Poscar) -> (Vec<i32>, BTreeMap<String, i32>) {
+    let mut element_map: BTreeMap<String, i32> = BTreeMap::new();
+    let mut counter: i32 = 1;
+    let mut types = Vec::with_capacity(poscar.total_atoms as usize);
 
     for (el_raw, &count) in poscar.elements.iter().zip(poscar.num_atoms.iter()) {
-        // Strip whitespace and slashes (matches C++ implementation)
+        // Strip whitespace and slashes (mirrors the C++ implementation)
         let el: String = el_raw
             .chars()
             .filter(|&c| c != '/' && !c.is_whitespace())
@@ -141,59 +58,72 @@ fn prepare_spglib_input(
             id
         });
         for _ in 0..count {
-            types[idx] = type_id;
-            idx += 1;
+            types.push(type_id);
         }
     }
 
-    (spg_lat, positions, types, element_map)
+    (types, element_map)
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-/// Run spglib symmetry analysis.  The input is converted to fractional
-/// coordinates internally if needed.
+/// Run spglib symmetry analysis and return a [`Dataset`] with all fields
+/// decoded into owned Rust types.
 ///
-/// Returns `None` if spglib fails (null dataset pointer).
-pub fn analyze_symmetry(poscar: &Poscar, symprec: f64) -> Option<SpglibDatasetGuard> {
+/// Returns `None` if spglib returns a null dataset (symmetry search failed).
+pub fn analyze_symmetry(poscar: &Poscar, symprec: f64) -> Option<Dataset> {
     let mut base = poscar.clone();
     if !base.is_direct {
         base.to_direct();
     }
 
-    let (spg_lat, positions, types, _) = prepare_spglib_input(&base);
+    let (cell, _) = poscar_to_cell(&base);
 
-    let ptr = unsafe {
-        spg_get_dataset(
-            spg_lat.as_ptr(),
-            positions.as_ptr(),
-            types.as_ptr(),
-            base.total_atoms,
+    // Call spg_get_dataset through spglib_sys so we can check for null before
+    // handing the pointer to Dataset::try_from (which would panic on null).
+    let raw = unsafe {
+        ffi::spg_get_dataset(
+            cell.lattice.as_ptr() as *mut [f64; 3],
+            cell.positions.as_ptr() as *mut [f64; 3],
+            cell.types.as_ptr() as *const c_int,
+            cell.positions.len() as c_int,
             symprec,
         )
     };
 
-    SpglibDatasetGuard::new(ptr)
+    if raw.is_null() {
+        return None;
+    }
+
+    // Dataset::try_from transfers ownership of spglib's inner arrays into Vecs.
+    Dataset::try_from(raw).ok()
 }
 
 /// Standardise a crystal cell using spglib.
 ///
-/// * `primitive = 1` → primitive cell; `primitive = 0` → conventional cell.
-/// * `idealize = 1` → idealise lattice parameters.
+/// * `primitive = true`  → primitive cell
+/// * `primitive = false` → conventional cell
+/// * `idealize`          → whether to idealise lattice parameters
 ///
 /// Returns `None` if spglib fails.
+///
+/// # Note on memory
+/// `spglib::cell::Cell::standardize` does not expose the new atom count and
+/// does not pre-allocate for larger conventional cells, so we call
+/// `spglib_sys::spg_standardize_cell` directly here with a properly-sized
+/// buffer.
 pub fn standardize_cell(
     poscar: &Poscar,
     symprec: f64,
-    primitive: c_int,
-    idealize: c_int,
+    primitive: bool,
+    idealize: bool,
 ) -> Option<Poscar> {
     // Warn about empty spheres
     for el in &poscar.elements {
         if matches!(el.as_str(), "X" | "E" | "V" | "Vac") {
             eprintln!(
-                "Warning: Empty sphere detected ('{el}'). \
-                 spglib will treat it as a real atom and symmetry may change."
+                "Warning: empty sphere '{el}' detected; \
+                 spglib will treat it as a real atom."
             );
         }
     }
@@ -203,23 +133,25 @@ pub fn standardize_cell(
         base.to_direct();
     }
 
-    let (mut spg_lat, mut positions, mut types, element_map) =
-        prepare_spglib_input(&base);
+    let (cell_base, element_map) = poscar_to_cell(&base);
+    let n_in = base.total_atoms as usize;
 
-    // Allocate space for up to 64× the input atoms (worst-case conventional cell).
-    let n_in = base.total_atoms;
-    let capacity = (n_in as usize) * 64;
+    // Pre-allocate 64× the input for worst-case conventional cell expansion.
+    let capacity = n_in * 64;
+    let mut lat = cell_base.lattice;
+    let mut positions: Vec<[f64; 3]> = cell_base.positions.clone();
     positions.resize(capacity, [0.0; 3]);
+    let mut types: Vec<i32> = cell_base.types.clone();
     types.resize(capacity, 0);
 
     let n_out = unsafe {
-        spg_standardize_cell(
-            spg_lat.as_mut_ptr(),
+        ffi::spg_standardize_cell(
+            lat.as_mut_ptr(),
             positions.as_mut_ptr(),
-            types.as_mut_ptr(),
-            n_in,
-            primitive,
-            idealize,
+            types.as_mut_ptr() as *mut c_int,
+            n_in as c_int,
+            if primitive { 1 } else { 0 },
+            if idealize { 1 } else { 0 },
             symprec,
         )
     };
@@ -227,9 +159,10 @@ pub fn standardize_cell(
     if n_out <= 0 {
         return None;
     }
+    let n_out = n_out as usize;
 
     // Build reverse map: type_id → element symbol
-    let max_type = types[..n_out as usize].iter().copied().max().unwrap_or(0) as usize;
+    let max_type = types[..n_out].iter().copied().max().unwrap_or(0) as usize;
     let mut type_to_el = vec![String::new(); max_type + 1];
     for (el, &t) in &element_map {
         if (t as usize) <= max_type {
@@ -237,24 +170,24 @@ pub fn standardize_cell(
         }
     }
 
-    // Transpose lattice back to POSCAR row-vector layout
+    // Transpose spglib column-vector lattice back to POSCAR row-vector layout
     let mut out_lat = [[0.0f64; 3]; 3];
     for i in 0..3 {
         for j in 0..3 {
-            out_lat[i][j] = spg_lat[j][i];
+            out_lat[i][j] = lat[j][i];
         }
     }
 
-    let suffix = if primitive == 1 { " primitive cell" } else { " conventional cell" };
+    let suffix = if primitive { " primitive cell" } else { " conventional cell" };
 
-    // Build output POSCAR, preserving original element order
+    // Build output POSCAR, preserving the original element order
     let mut out_elements: Vec<String> = Vec::new();
     let mut out_num_atoms: Vec<i32> = Vec::new();
     let mut out_coords: Vec<Atom> = Vec::new();
 
     for orig_el in &poscar.elements {
         let mut count = 0i32;
-        for i in 0..n_out as usize {
+        for i in 0..n_out {
             if type_to_el[types[i] as usize] == *orig_el {
                 out_coords.push(Atom::new(positions[i][0], positions[i][1], positions[i][2]));
                 count += 1;
@@ -274,60 +207,54 @@ pub fn standardize_cell(
         num_atoms: out_num_atoms,
         selective_dynamics: false,
         is_direct: true,
-        total_atoms: n_out,
+        total_atoms: n_out as i32,
         coordinates: out_coords,
     })
 }
 
-// ─── Printing helpers ──────────────────────────────────────────────────────────
+// ─── Printing ─────────────────────────────────────────────────────────────────
 
 /// Print a human-readable symmetry summary to stdout.
-pub fn print_symmetry_info(dataset: &SpglibDataset, wyckoff: bool, symoperations: bool) {
+pub fn print_symmetry_info(dataset: &Dataset, wyckoff: bool, symoperations: bool) {
     println!("=== Symmetry Information ===");
     println!("Space group number: {}", dataset.spacegroup_number);
-    println!("International symbol: {}", cchar_to_string(&dataset.international_symbol));
-    println!("Hall symbol: {}", cchar_to_string(&dataset.hall_symbol));
-    println!("Point group: {}", cchar_to_string(&dataset.pointgroup_symbol));
+    println!("International symbol: {}", dataset.international_symbol);
+    println!("Hall symbol: {}", dataset.hall_symbol);
+    println!("Point group: {}", dataset.pointgroup_symbol);
     println!("\nNumber of symmetry operations: {}", dataset.n_operations);
 
     if symoperations {
         print_symmetry_operations(dataset);
     }
 
-    let mut irreducible: BTreeSet<c_int> = BTreeSet::new();
-    for i in 0..dataset.n_atoms as usize {
-        let eq = unsafe { *dataset.equivalent_atoms.add(i) };
-        irreducible.insert(eq);
-    }
-    println!("\nNumber of Wyckoff positions (irreducible atoms): {}", irreducible.len());
+    let irreducible: BTreeSet<i32> = dataset.equivalent_atoms.iter().copied().collect();
+    println!(
+        "\nNumber of Wyckoff positions (irreducible atoms): {}",
+        irreducible.len()
+    );
 
     if wyckoff {
         print!("Wyckoff letters: ");
-        for i in 0..dataset.n_atoms as usize {
-            let w = unsafe { *dataset.wyckoffs.add(i) };
-            let letter = (b'a' + w as u8) as char;
-            print!("{letter} ");
+        for &w in &dataset.wyckoffs {
+            print!("{} ", (b'a' + w as u8) as char);
         }
         println!();
     }
 }
 
 /// Print all symmetry operations (rotation matrices + translation vectors).
-pub fn print_symmetry_operations(dataset: &SpglibDataset) {
-    for i in 0..dataset.n_operations as usize {
+pub fn print_symmetry_operations(dataset: &Dataset) {
+    for (i, (rot, tr)) in dataset
+        .rotations
+        .iter()
+        .zip(dataset.translations.iter())
+        .enumerate()
+    {
         println!("Operation {}:", i + 1);
         println!("  Rotation matrix:");
-        let rot = unsafe { &*dataset.rotations.add(i) };
         for row in rot {
             println!("   {:2} {:2} {:2}", row[0], row[1], row[2]);
         }
-        let tr = unsafe { &*dataset.translations.add(i) };
         println!("  Translation vector: {} {} {}", tr[0], tr[1], tr[2]);
     }
-}
-
-/// Extract the international symbol from a dataset as an owned `String`.
-/// Exposed for use by [`crate::kpath`].
-pub fn spglib_intl_symbol(dataset: &SpglibDataset) -> String {
-    cchar_to_string(&dataset.international_symbol)
 }

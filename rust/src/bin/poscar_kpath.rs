@@ -4,7 +4,7 @@ use std::fmt::Write as FmtWrite;
 use clap::Parser;
 use vasp_utils::kpath::{get_bravais_kpath, KPath, KPoint};
 use vasp_utils::poscar::Poscar;
-use vasp_utils::symmetry::{analyze_symmetry, spglib_intl_symbol, standardize_cell};
+use vasp_utils::symmetry::{analyze_symmetry, standardize_cell};
 
 #[derive(Parser)]
 #[command(about = "Generate VASP KPOINTS line-mode file from POSCAR using spglib")]
@@ -74,7 +74,7 @@ fn main() {
     };
 
     // Standardize to conventional cell for Bravais type detection
-    let conv = match standardize_cell(&poscar, cli.symprec, 0, 0) {
+    let conv = match standardize_cell(&poscar, cli.symprec, false, false) {
         Some(c) => c,
         None => {
             eprintln!("Error: spglib could not standardize the cell.");
@@ -83,7 +83,7 @@ fn main() {
     };
 
     // Primitive cell — needed for aP orientation reference
-    let prim_early = match standardize_cell(&poscar, cli.symprec, 1, 0) {
+    let prim_early = match standardize_cell(&poscar, cli.symprec, true, false) {
         Some(p) => p,
         None => {
             eprintln!("Error: spglib could not generate primitive cell.");
@@ -91,20 +91,18 @@ fn main() {
         }
     };
 
-    let guard = match analyze_symmetry(&conv, cli.symprec) {
-        Some(g) => g,
+    let dataset = match analyze_symmetry(&conv, cli.symprec) {
+        Some(d) => d,
         None => {
             eprintln!("Error: spglib symmetry analysis failed.");
             std::process::exit(1);
         }
     };
-
-    let dataset = guard.get();
-    let intl = spglib_intl_symbol(dataset);
+    let intl = &dataset.international_symbol;
     println!("Space group: {intl} (#{})", dataset.spacegroup_number);
 
     // Pass the as-read POSCAR as orientation reference for aP subcase detection.
-    let kpath = match get_bravais_kpath(&conv, &poscar, dataset) {
+    let kpath = match get_bravais_kpath(&conv, &poscar, &dataset) {
         Some(k) => k,
         None => {
             eprintln!(

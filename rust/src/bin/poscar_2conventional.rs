@@ -32,8 +32,7 @@ fn main() {
         }
     };
 
-    let idealize = if cli.idealize { 1 } else { 0 };
-    match standardize_cell(&poscar, cli.symprec, 0, idealize) {
+    match standardize_cell(&poscar, cli.symprec, false, cli.idealize) {
         Some(conv) => {
             if let Err(e) = conv.write(&cli.output) {
                 eprintln!("{e}");

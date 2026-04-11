@@ -38,19 +38,19 @@ fn main() {
         }
     };
 
-    let guard = match analyze_symmetry(&poscar, cli.symprec) {
-        Some(g) => g,
+    let dataset = match analyze_symmetry(&poscar, cli.symprec) {
+        Some(d) => d,
         None => {
             eprintln!("Error: failed to analyze symmetry.");
             std::process::exit(1);
         }
     };
 
-    print_symmetry_info(guard.get(), cli.wyckoff, cli.symoper);
+    print_symmetry_info(&dataset, cli.wyckoff, cli.symoper);
 
     if cli.primitive {
         println!("Creating the primitive cell file.");
-        match standardize_cell(&poscar, cli.symprec, 1, 0) {
+        match standardize_cell(&poscar, cli.symprec, true, false) {
             Some(prim) => {
                 if let Err(e) = prim.write(&cli.output) {
                     eprintln!("{e}");
