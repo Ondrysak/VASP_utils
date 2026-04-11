@@ -44,6 +44,8 @@ find_library(LAPACKE_LIB lapacke REQUIRED)
 add_library(vasp_core
     src/poscar_file.cpp
     src/random_utility.cpp
+    src/outcar_file.cpp
+    src/elastic_properties.cpp
 )
 
 # Headers exported by the core library
@@ -105,6 +107,9 @@ target_link_libraries(poscar_2primitive PRIVATE vasp_spglib CLI11::CLI11)
 add_executable(poscar_2conventional src/poscar_2conventional.cpp)
 target_link_libraries(poscar_2conventional PRIVATE vasp_spglib CLI11::CLI11)
 
+add_executable(poscar_elastic src/poscar_elastic.cpp)
+target_link_libraries(poscar_elastic PRIVATE vasp_spglib CLI11::CLI11)
+
 # ===== Tests (GoogleTest) =====
 FetchContent_Declare(
     googletest
@@ -121,6 +126,7 @@ add_executable(vasp_tests
     tests/test_poscar_io.cpp
     tests/test_coordinate_conversion.cpp
     tests/test_displacement.cpp
+    tests/test_elastic.cpp
 )
 
 target_link_libraries(vasp_tests PRIVATE vasp_core GTest::gtest_main)
