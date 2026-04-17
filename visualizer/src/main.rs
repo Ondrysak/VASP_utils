@@ -678,12 +678,21 @@ fn chrono_stamp() -> String {
 fn main() {
     env_logger::init();
 
-    let path = std::env::args().nth(1).unwrap_or_else(|| "POSCAR".to_owned());
-    let crystal = poscar::Crystal::from_file(&path).unwrap_or_else(|e| {
-        eprintln!("Error loading '{path}': {e}");
-        std::process::exit(1);
-    });
-    println!("Loaded {} atoms from '{path}'", crystal.atoms.len());
+    let crystal = if let Some(path) = std::env::args().nth(1) {
+        poscar::Crystal::from_file(&path).unwrap_or_else(|e| {
+            eprintln!("Error loading '{path}': {e}");
+            std::process::exit(1);
+        })
+    } else if std::path::Path::new("POSCAR").exists() {
+        poscar::Crystal::from_file("POSCAR").unwrap_or_else(|e| {
+            eprintln!("Error loading 'POSCAR': {e}");
+            std::process::exit(1);
+        })
+    } else {
+        // No POSCAR supplied — start from the built-in crystal library
+        all_crystals()[0].to_crystal()
+    };
+    println!("Loaded {} atoms", crystal.atoms.len());
     println!("Controls:");
     println!("  Tab      — Atoms / Field toggle");
     println!("  T        — auto-tour on/off");
