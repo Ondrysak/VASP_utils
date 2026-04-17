@@ -1,3 +1,4 @@
+mod audio;
 mod camera;
 mod crystals;
 mod kpoints;
@@ -63,8 +64,8 @@ pub struct LfoParams {
     pub w_lattice:   bool,
     pub w_motif:     bool,
     pub w_band:      bool,
-    pub rate:        f32,   // Hz
-    pub depth:       f32,   // fraction of param range
+    pub rate:        f32,
+    pub depth:       f32,
 }
 
 impl Default for LfoParams {
@@ -77,25 +78,100 @@ impl Default for LfoParams {
     }
 }
 
-/// Return a copy of `fp` with LFO-enabled params modulated by sin at time `t`.
-fn apply_lfo(fp: &FieldParams, lfo: &LfoParams, t: f32) -> FieldParams {
-    let s = (2.0 * std::f32::consts::PI * lfo.rate * t).sin();
-    macro_rules! lmod {
-        ($val:expr, $en:expr, $min:expr, $max:expr) => {
-            if $en { ($val + lfo.depth * ($max - $min) * s).clamp($min, $max) } else { $val }
-        };
+// ── Mic modulation ────────────────────────────────────────────────────────
+
+/// Which audio band (or none) drives a parameter.
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum MicSrc { #[default] Off, Amp, Bass, Mid, Treble }
+
+impl MicSrc {
+    fn next(self) -> Self {
+        match self {
+            Self::Off    => Self::Amp,
+            Self::Amp    => Self::Bass,
+            Self::Bass   => Self::Mid,
+            Self::Mid    => Self::Treble,
+            Self::Treble => Self::Off,
+        }
+    }
+    fn label(self) -> &'static str {
+        match self { Self::Off => "·", Self::Amp => "A", Self::Bass => "B", Self::Mid => "M", Self::Treble => "T" }
+    }
+    fn color(self) -> egui::Color32 {
+        match self {
+            Self::Off    => egui::Color32::from_gray(70),
+            Self::Amp    => egui::Color32::from_rgb(220, 220, 220),
+            Self::Bass   => egui::Color32::from_rgb(255,  80,  80),
+            Self::Mid    => egui::Color32::from_rgb( 80, 220, 120),
+            Self::Treble => egui::Color32::from_rgb( 80, 160, 255),
+        }
+    }
+    fn value(self, b: &audio::AudioBands) -> f32 {
+        match self {
+            Self::Off    => 0.0,
+            Self::Amp    => b.amplitude,
+            Self::Bass   => b.bass,
+            Self::Mid    => b.mid,
+            Self::Treble => b.treble,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct MicParams {
+    pub kscale:      MicSrc,
+    pub speed:       MicSrc,
+    pub field_mix:   MicSrc,
+    pub iso_level:   MicSrc,
+    pub color_shift: MicSrc,
+    pub zoom:        MicSrc,
+    pub w_lattice:   MicSrc,
+    pub w_motif:     MicSrc,
+    pub w_band:      MicSrc,
+    pub depth:       f32,
+}
+
+impl Default for MicParams {
+    fn default() -> Self {
+        Self {
+            kscale: MicSrc::Off, speed: MicSrc::Off, field_mix: MicSrc::Off,
+            iso_level: MicSrc::Off, color_shift: MicSrc::Off, zoom: MicSrc::Off,
+            w_lattice: MicSrc::Off, w_motif: MicSrc::Off, w_band: MicSrc::Off,
+            depth: 0.5,
+        }
+    }
+}
+
+// ── Combined LFO + Mic modulation ─────────────────────────────────────────
+
+/// Returns a FieldParams with LFO and mic deltas applied additively from the base.
+fn apply_modulation(
+    fp:    &FieldParams,
+    lfo:   &LfoParams,
+    mic:   &MicParams,
+    bands: &audio::AudioBands,
+    t:     f32,
+) -> FieldParams {
+    let lfo_s = (2.0 * std::f32::consts::PI * lfo.rate * t).sin();
+    macro_rules! modulate {
+        ($val:expr, $lfo_en:expr, $mic_src:expr, $min:expr, $max:expr) => {{
+            let range   = ($max as f32) - ($min as f32);
+            let lfo_d   = if $lfo_en { lfo.depth * range * lfo_s } else { 0.0 };
+            let mic_d   = $mic_src.value(bands) * mic.depth * range;
+            ($val + lfo_d + mic_d).clamp($min as f32, $max as f32)
+        }};
     }
     FieldParams {
         mode:        fp.mode,
-        kscale:      lmod!(fp.kscale,      lfo.kscale,      0.1_f32, 5.0_f32),
-        speed:       lmod!(fp.speed,       lfo.speed,       0.0_f32, 2.0_f32),
-        field_mix:   lmod!(fp.field_mix,   lfo.field_mix,   0.0_f32, 1.0_f32),
-        iso_level:   lmod!(fp.iso_level,   lfo.iso_level,   0.0_f32, 1.0_f32),
-        color_shift: lmod!(fp.color_shift, lfo.color_shift, 0.0_f32, 1.0_f32),
-        zoom:        lmod!(fp.zoom,        lfo.zoom,        0.2_f32, 5.0_f32),
-        w_lattice:   lmod!(fp.w_lattice,   lfo.w_lattice,   0.0_f32, 2.0_f32),
-        w_motif:     lmod!(fp.w_motif,     lfo.w_motif,     0.0_f32, 2.0_f32),
-        w_band:      lmod!(fp.w_band,      lfo.w_band,      0.0_f32, 2.0_f32),
+        kscale:      modulate!(fp.kscale,      lfo.kscale,      mic.kscale,      0.1, 5.0),
+        speed:       modulate!(fp.speed,       lfo.speed,       mic.speed,       0.0, 2.0),
+        field_mix:   modulate!(fp.field_mix,   lfo.field_mix,   mic.field_mix,   0.0, 1.0),
+        iso_level:   modulate!(fp.iso_level,   lfo.iso_level,   mic.iso_level,   0.0, 1.0),
+        color_shift: modulate!(fp.color_shift, lfo.color_shift, mic.color_shift, 0.0, 1.0),
+        zoom:        modulate!(fp.zoom,        lfo.zoom,        mic.zoom,        0.2, 5.0),
+        w_lattice:   modulate!(fp.w_lattice,   lfo.w_lattice,   mic.w_lattice,   0.0, 2.0),
+        w_motif:     modulate!(fp.w_motif,     lfo.w_motif,     mic.w_motif,     0.0, 2.0),
+        w_band:      modulate!(fp.w_band,      lfo.w_band,      mic.w_band,      0.0, 2.0),
     }
 }
 
@@ -204,6 +280,8 @@ struct App {
     panel_open:   bool,
     search_str:   String,
     lfo:          LfoParams,
+    mic_params:   MicParams,
+    audio:        Option<audio::AudioCapture>,
 }
 
 impl App {
@@ -222,6 +300,8 @@ impl App {
             panel_open: true,
             search_str: String::new(),
             lfo: LfoParams::default(),
+            mic_params: MicParams::default(),
+            audio: audio::AudioCapture::start(),
         }
     }
 
@@ -455,13 +535,17 @@ impl ApplicationHandler for App {
                 let cur_kpt_label: String = gpu.kpath.as_ref()
                     .map(|kp| kp.label_at(self.kpt_idx % kp.n_points()).to_owned())
                     .unwrap_or_default();
-                // Snapshot field_params and lfo (closure will modify these copies;
-                // we build FieldUniform from them NOW, before the closure captures &mut fp.*)
+                // Snapshot field_params, lfo, mic, and current audio bands.
                 let mut fp  = self.field_params.clone();
                 let mut lfo = self.lfo.clone();
+                let mut mic = self.mic_params.clone();
+                let cur_bands = self.audio.as_ref()
+                    .and_then(|a| a.bands.lock().ok().map(|b| b.clone()))
+                    .unwrap_or_default();
+                let mic_active = self.audio.is_some();
 
-                // Apply LFO modulation to get the effective values for this frame.
-                let fp_eff = apply_lfo(&fp, &lfo, t);
+                // Apply LFO + mic modulation to get effective values for this frame.
+                let fp_eff = apply_modulation(&fp, &lfo, &mic, &cur_bands, t);
 
                 // Pre-build FieldUniform from the LFO-modulated snapshot so the closure can
                 // freely mutate fp.* without conflicting with the match arm below.
@@ -552,38 +636,51 @@ impl ApplicationHandler for App {
 
                                 ui.separator();
 
-                                // Sliders — each has a "~" LFO toggle on the left
+                                // Sliders — [~] LFO toggle  [·/A/B/M/T] mic source
                                 ui.label(egui::RichText::new("FIELD PARAMETERS")
                                     .small().color(egui::Color32::from_rgb(120, 120, 160)));
                                 macro_rules! sld {
-                                    ($ui:expr, $label:literal, $val:expr, $lfo_en:expr, $min:expr, $max:expr) => {
+                                    ($ui:expr, $label:literal, $val:expr,
+                                     $lfo_en:expr, $mic_src:expr, $min:expr, $max:expr) => {
                                         $ui.horizontal(|ui| {
-                                            let col = if *$lfo_en {
+                                            // LFO toggle
+                                            let lc = if *$lfo_en {
                                                 egui::Color32::from_rgb(80, 220, 120)
                                             } else {
                                                 egui::Color32::from_gray(80)
                                             };
                                             if ui.add(egui::Button::new(
-                                                egui::RichText::new("~").color(col).small()
+                                                egui::RichText::new("~").color(lc).small()
+                                            ).small()).clicked() { *$lfo_en = !*$lfo_en; }
+
+                                            // Mic source cycle button
+                                            let mc = $mic_src.color();
+                                            let ml = $mic_src.label();
+                                            if ui.add(egui::Button::new(
+                                                egui::RichText::new(ml).color(mc).small()
                                             ).small()).clicked() {
-                                                *$lfo_en = !*$lfo_en;
+                                                let ns = (*$mic_src).next();
+                                                *$mic_src = ns;
                                             }
+
                                             ui.label(egui::RichText::new($label).small());
                                             ui.add(egui::Slider::new($val, $min..=$max).show_value(true));
                                         });
                                     }
                                 }
-                                sld!(ui, "kscale   ", &mut fp.kscale,      &mut lfo.kscale,      0.1, 5.0);
-                                sld!(ui, "speed    ", &mut fp.speed,       &mut lfo.speed,       0.0, 2.0);
-                                sld!(ui, "field_mix", &mut fp.field_mix,   &mut lfo.field_mix,   0.0, 1.0);
-                                sld!(ui, "iso_level", &mut fp.iso_level,   &mut lfo.iso_level,   0.0, 1.0);
-                                sld!(ui, "color_sft", &mut fp.color_shift, &mut lfo.color_shift, 0.0, 1.0);
-                                sld!(ui, "zoom     ", &mut fp.zoom,        &mut lfo.zoom,        0.2, 5.0);
-                                sld!(ui, "w_lattice", &mut fp.w_lattice,   &mut lfo.w_lattice,   0.0, 2.0);
-                                sld!(ui, "w_motif  ", &mut fp.w_motif,     &mut lfo.w_motif,     0.0, 2.0);
-                                sld!(ui, "w_band   ", &mut fp.w_band,      &mut lfo.w_band,      0.0, 2.0);
+                                sld!(ui, "kscale   ", &mut fp.kscale,      &mut lfo.kscale,      &mut mic.kscale,      0.1_f32, 5.0_f32);
+                                sld!(ui, "speed    ", &mut fp.speed,       &mut lfo.speed,       &mut mic.speed,       0.0_f32, 2.0_f32);
+                                sld!(ui, "field_mix", &mut fp.field_mix,   &mut lfo.field_mix,   &mut mic.field_mix,   0.0_f32, 1.0_f32);
+                                sld!(ui, "iso_level", &mut fp.iso_level,   &mut lfo.iso_level,   &mut mic.iso_level,   0.0_f32, 1.0_f32);
+                                sld!(ui, "color_sft", &mut fp.color_shift, &mut lfo.color_shift, &mut mic.color_shift, 0.0_f32, 1.0_f32);
+                                sld!(ui, "zoom     ", &mut fp.zoom,        &mut lfo.zoom,        &mut mic.zoom,        0.2_f32, 5.0_f32);
+                                sld!(ui, "w_lattice", &mut fp.w_lattice,   &mut lfo.w_lattice,   &mut mic.w_lattice,   0.0_f32, 2.0_f32);
+                                sld!(ui, "w_motif  ", &mut fp.w_motif,     &mut lfo.w_motif,     &mut mic.w_motif,     0.0_f32, 2.0_f32);
+                                sld!(ui, "w_band   ", &mut fp.w_band,      &mut lfo.w_band,      &mut mic.w_band,      0.0_f32, 2.0_f32);
 
                                 ui.separator();
+
+                                // LFO section
                                 ui.label(egui::RichText::new("LFO  (sin)")
                                     .small().color(egui::Color32::from_rgb(80, 220, 120)));
                                 ui.horizontal(|ui| {
@@ -596,6 +693,40 @@ impl ApplicationHandler for App {
                                     ui.add(egui::Slider::new(&mut lfo.depth, 0.0..=1.0)
                                         .show_value(true));
                                 });
+
+                                ui.separator();
+
+                                // Mic section
+                                let mic_col = if mic_active {
+                                    egui::Color32::from_rgb(255, 140, 80)
+                                } else {
+                                    egui::Color32::from_gray(100)
+                                };
+                                ui.label(egui::RichText::new(if mic_active { "MIC  (live)" } else { "MIC  (no device)" })
+                                    .small().color(mic_col));
+                                if mic_active {
+                                    // Band meters
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("A").small()
+                                            .color(egui::Color32::from_rgb(220,220,220)));
+                                        ui.add(egui::ProgressBar::new(cur_bands.amplitude).desired_width(38.0));
+                                        ui.label(egui::RichText::new("B").small()
+                                            .color(egui::Color32::from_rgb(255,80,80)));
+                                        ui.add(egui::ProgressBar::new(cur_bands.bass).desired_width(38.0));
+                                        ui.label(egui::RichText::new("M").small()
+                                            .color(egui::Color32::from_rgb(80,220,120)));
+                                        ui.add(egui::ProgressBar::new(cur_bands.mid).desired_width(38.0));
+                                        ui.label(egui::RichText::new("T").small()
+                                            .color(egui::Color32::from_rgb(80,160,255)));
+                                        ui.add(egui::ProgressBar::new(cur_bands.treble).desired_width(38.0));
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("depth").small());
+                                        ui.add(egui::Slider::new(&mut mic.depth, 0.0..=2.0).show_value(true));
+                                    });
+                                    ui.label(egui::RichText::new("Click · on a slider to pick source")
+                                        .small().color(egui::Color32::from_gray(130)));
+                                }
 
                                 ui.separator();
 
@@ -693,6 +824,7 @@ impl ApplicationHandler for App {
                 // ── Apply UI mutations (closure is dropped, borrows released) ──
                 self.field_params = fp;
                 self.lfo          = lfo;
+                self.mic_params   = mic;
                 self.search_str   = search;
                 if req.panel_toggle { self.panel_open = !cur_panel_open; }
 

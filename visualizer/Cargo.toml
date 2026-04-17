@@ -15,3 +15,5 @@ egui        = "0.29"
 egui-wgpu   = "0.29"
 egui-winit  = "0.29"
 image       = { version = "0.24", default-features = false, features = ["png"] }
+cpal        = "0.15"
+rustfft     = "6"
