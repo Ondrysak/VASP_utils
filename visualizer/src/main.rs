@@ -291,7 +291,7 @@ impl App {
             gpu: None, start_crystal: crystal,
             start: Instant::now(), prev_t: 0.0,
             dragging: false, last_mouse: None, auto_rotate: true,
-            render_mode: RenderMode::Atoms,
+            render_mode: RenderMode::Field,
             field_params: FieldParams::default(),
             mouse_norm: [0.5, 0.5], mouse_btn_down: false,
             kpath_active: false, kpt_idx: 0,
