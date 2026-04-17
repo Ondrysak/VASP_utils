@@ -1817,6 +1817,87 @@ fn render_recip3d(uv: vec2<f32>) -> vec3<f32> {
     return col;
 }
 
+// ── Mode 12: non-Euclidean kaleidoscope (Kleinian circle inversions) ─────
+// Alternately inverts the pixel coordinate through circles centred on the
+// first 4 projected G vectors — each inversion is a "reflection" in the
+// hyperbolic metric, producing a fractal Kleinian / Schottky tiling.
+// The crystal field is sampled at every depth level so the pattern changes
+// completely with each crystal in the tour.
+// Controls:
+//   mouse drag  = orbit (rotates generator circles)
+//   iso_level   = inversion-circle radius scale
+//   color_shift = palette rotation
+fn circle_inv(z: vec2<f32>, c: vec2<f32>, r: f32) -> vec2<f32> {
+    let d = z - c;
+    return c + r * r * d / max(dot(d, d), 1e-15);
+}
+
+fn render_noneuclidean(uv: vec2<f32>) -> vec3<f32> {
+    let t  = u.time * u.speed * 0.07;
+    var az = t * 0.18;
+    var el = 0.28;
+    if u.mouse_down >= 0.5 {
+        az = u.mouse.x * TAU;
+        el = (u.mouse.y - 0.5) * 2.5;
+    }
+    let ca = cos(az); let sa = sin(az);
+    let ce = cos(el); let se = sin(el);
+
+    // Project first 4 G vectors into the 2D screen for circle centres
+    let sc = u.kscale * 0.40;
+    var ctrs: array<vec2<f32>, 4>;
+    var rads: array<f32, 4>;
+    for (var i = 0u; i < 4u; i++) {
+        let ga  = textureLoad(g_tex, vec2<i32>(i32(i), 0), 0);
+        let G   = ga.xyz * sc;
+        let gx  = G.x*ca - G.z*sa;
+        let gyr = G.x*sa + G.z*ca;
+        let gy  = G.y*ce - gyr*se;
+        ctrs[i] = vec2<f32>(gx, gy);
+        // iso_level 0..1 → radius factor 0.45..0.80
+        rads[i] = max(length(ctrs[i]) * (0.45 + u.iso_level * 0.35), 0.04);
+    }
+
+    var z    = uv;
+    var col  = vec3<f32>(0.0);
+    var last = -1i;   // index of circle used in previous iteration (no back-flipping)
+
+    for (var iter = 0i; iter < 52i; iter++) {
+        // Find the first circle (other than last) that contains z
+        var inv_c = -1i;
+        for (var ci = 0i; ci < 4i; ci++) {
+            if ci != last && inv_c < 0i {
+                let d2 = dot(z - ctrs[u32(ci)], z - ctrs[u32(ci)]);
+                if d2 < rads[u32(ci)] * rads[u32(ci)] { inv_c = ci; }
+            }
+        }
+        if inv_c < 0i { break; }   // no circle contains z → in fundamental domain
+
+        let ic = u32(inv_c);
+        z    = circle_inv(z, ctrs[ic], rads[ic]);
+        last = inv_c;
+
+        // Sample crystal field at this folded coordinate
+        let f   = crystal_field(vec3<f32>(z,        t + f32(iter) * 0.08));
+        let f2v = cf2(          vec3<f32>(z * 1.17, t + f32(iter) * 0.13));
+        let dcay = exp(-f32(iter) * 0.050);
+        let hue  = fract(f32(ic) * 0.25 + f * 0.9 + f2v * 0.4 + u.color_shift + t * 0.04);
+        var  tc  = 0.5 + 0.5 * cos(TAU * (hue + vec3<f32>(0.0, 0.333, 0.667)));
+        tc   = mix(tc, u.crystal_color.xyz, 0.28);
+        col += tc * dcay * (0.08 + 0.45 * abs(f));
+    }
+
+    // Crystal field at the final deepest-folded position
+    let f_fin  = crystal_field(vec3<f32>(z * 1.4, t * 0.18));
+    let f2_fin = cf2(          vec3<f32>(z * 1.6, t * 0.22));
+    let hue_f  = fract(f_fin * 1.1 + f2_fin * 0.5 + u.color_shift + t * 0.025);
+    var  base  = 0.5 + 0.5 * cos(TAU * (hue_f + vec3<f32>(0.0, 0.333, 0.667)));
+    base  = mix(base, u.crystal_color.xyz, 0.28);
+    col   = col * 0.72 + base * (0.10 + 0.32 * abs(f_fin));
+
+    return col;
+}
+
 @fragment fn fs_field(f: VOut) -> @location(0) vec4<f32> {
     let uv = (f.uv*2.0 - 1.0) * vec2<f32>(u.aspect, 1.0);
     var col: vec3<f32>;
@@ -1832,13 +1913,14 @@ fn render_recip3d(uv: vec2<f32>) -> vec3<f32> {
         case 8u  { col = render_warp(uv); }
         case 9u  { col = render_links(uv); }
         case 10u { col = render_xrd(uv); }
-        default  { col = render_recip3d(uv); }
+        case 11u { col = render_recip3d(uv); }
+        default  { col = render_noneuclidean(uv); }
     }
-    // vignette — skip for XRD and RECIP3D (both have their own boundaries)
+    // vignette — skip for XRD and RECIP3D (own detector/space boundaries)
     if u.mode != 10u && u.mode != 11u {
         col *= 1.0 - 0.35*dot(f.uv*2.0-1.0, f.uv*2.0-1.0);
     }
-    // tone-map — skip for XRD (preserves sharp spots); RECIP3D uses it
+    // tone-map — skip for XRD (preserves sharp spots)
     if u.mode != 10u {
         col = col / (col + vec3<f32>(0.6));
         col = pow(max(col, vec3<f32>(0.0)), vec3<f32>(0.85));
