@@ -50,6 +50,55 @@ impl Default for FieldParams {
 
 const MODE_NAMES: [&str; 5] = ["3D ISO", "BZ SLICE", "FERMI", "DENSITY", "NODAL"];
 
+// ── LFO ───────────────────────────────────────────────────────────────────
+
+#[derive(Clone)]
+pub struct LfoParams {
+    pub kscale:      bool,
+    pub speed:       bool,
+    pub field_mix:   bool,
+    pub iso_level:   bool,
+    pub color_shift: bool,
+    pub zoom:        bool,
+    pub w_lattice:   bool,
+    pub w_motif:     bool,
+    pub w_band:      bool,
+    pub rate:        f32,   // Hz
+    pub depth:       f32,   // fraction of param range
+}
+
+impl Default for LfoParams {
+    fn default() -> Self {
+        Self {
+            kscale: false, speed: false, field_mix: false, iso_level: false,
+            color_shift: false, zoom: false, w_lattice: false, w_motif: false,
+            w_band: false, rate: 0.2, depth: 0.3,
+        }
+    }
+}
+
+/// Return a copy of `fp` with LFO-enabled params modulated by sin at time `t`.
+fn apply_lfo(fp: &FieldParams, lfo: &LfoParams, t: f32) -> FieldParams {
+    let s = (2.0 * std::f32::consts::PI * lfo.rate * t).sin();
+    macro_rules! lmod {
+        ($val:expr, $en:expr, $min:expr, $max:expr) => {
+            if $en { ($val + lfo.depth * ($max - $min) * s).clamp($min, $max) } else { $val }
+        };
+    }
+    FieldParams {
+        mode:        fp.mode,
+        kscale:      lmod!(fp.kscale,      lfo.kscale,      0.1_f32, 5.0_f32),
+        speed:       lmod!(fp.speed,       lfo.speed,       0.0_f32, 2.0_f32),
+        field_mix:   lmod!(fp.field_mix,   lfo.field_mix,   0.0_f32, 1.0_f32),
+        iso_level:   lmod!(fp.iso_level,   lfo.iso_level,   0.0_f32, 1.0_f32),
+        color_shift: lmod!(fp.color_shift, lfo.color_shift, 0.0_f32, 1.0_f32),
+        zoom:        lmod!(fp.zoom,        lfo.zoom,        0.2_f32, 5.0_f32),
+        w_lattice:   lmod!(fp.w_lattice,   lfo.w_lattice,   0.0_f32, 2.0_f32),
+        w_motif:     lmod!(fp.w_motif,     lfo.w_motif,     0.0_f32, 2.0_f32),
+        w_band:      lmod!(fp.w_band,      lfo.w_band,      0.0_f32, 2.0_f32),
+    }
+}
+
 // ── Tour state machine ────────────────────────────────────────────────────
 
 #[derive(PartialEq, Clone, Copy)]
@@ -154,6 +203,7 @@ struct App {
 
     panel_open:   bool,
     search_str:   String,
+    lfo:          LfoParams,
 }
 
 impl App {
@@ -171,6 +221,7 @@ impl App {
             all_crystals: all,
             panel_open: true,
             search_str: String::new(),
+            lfo: LfoParams::default(),
         }
     }
 
@@ -404,25 +455,29 @@ impl ApplicationHandler for App {
                 let cur_kpt_label: String = gpu.kpath.as_ref()
                     .map(|kp| kp.label_at(self.kpt_idx % kp.n_points()).to_owned())
                     .unwrap_or_default();
-                // Snapshot field_params (closure will modify this copy;
-                // we build FieldUniform from it NOW, before the closure captures &mut fp.*)
-                let mut fp = self.field_params.clone();
+                // Snapshot field_params and lfo (closure will modify these copies;
+                // we build FieldUniform from them NOW, before the closure captures &mut fp.*)
+                let mut fp  = self.field_params.clone();
+                let mut lfo = self.lfo.clone();
 
-                // Pre-build FieldUniform from the snapshot so the closure can freely
-                // mutate fp.* without conflicting with the match arm below.
+                // Apply LFO modulation to get the effective values for this frame.
+                let fp_eff = apply_lfo(&fp, &lfo, t);
+
+                // Pre-build FieldUniform from the LFO-modulated snapshot so the closure can
+                // freely mutate fp.* without conflicting with the match arm below.
                 let cdef = self.all_crystals[cur_crystal_idx];
                 let field_params_uniform = FieldUniform {
                     time:          t,
-                    kscale:        fp.kscale,
-                    speed:         fp.speed,
-                    field_mix:     fp.field_mix,
-                    iso_level:     fp.iso_level,
-                    color_shift:   fp.color_shift,
-                    zoom:          fp.zoom,
-                    w_lattice:     fp.w_lattice,
-                    w_motif:       fp.w_motif,
-                    w_band:        fp.w_band,
-                    mode:          fp.mode,
+                    kscale:        fp_eff.kscale,
+                    speed:         fp_eff.speed,
+                    field_mix:     fp_eff.field_mix,
+                    iso_level:     fp_eff.iso_level,
+                    color_shift:   fp_eff.color_shift,
+                    zoom:          fp_eff.zoom,
+                    w_lattice:     fp_eff.w_lattice,
+                    w_motif:       fp_eff.w_motif,
+                    w_band:        fp_eff.w_band,
+                    mode:          fp_eff.mode,
                     num_g:         gpu.gpu_field.count as u32,
                     crystal_color: [cdef.color[0], cdef.color[1], cdef.color[2], 0.0],
                     mouse:         self.mouse_norm,
@@ -497,26 +552,50 @@ impl ApplicationHandler for App {
 
                                 ui.separator();
 
-                                // Sliders
+                                // Sliders — each has a "~" LFO toggle on the left
                                 ui.label(egui::RichText::new("FIELD PARAMETERS")
                                     .small().color(egui::Color32::from_rgb(120, 120, 160)));
                                 macro_rules! sld {
-                                    ($ui:expr, $label:literal, $val:expr, $min:expr, $max:expr) => {
+                                    ($ui:expr, $label:literal, $val:expr, $lfo_en:expr, $min:expr, $max:expr) => {
                                         $ui.horizontal(|ui| {
+                                            let col = if *$lfo_en {
+                                                egui::Color32::from_rgb(80, 220, 120)
+                                            } else {
+                                                egui::Color32::from_gray(80)
+                                            };
+                                            if ui.add(egui::Button::new(
+                                                egui::RichText::new("~").color(col).small()
+                                            ).small()).clicked() {
+                                                *$lfo_en = !*$lfo_en;
+                                            }
                                             ui.label(egui::RichText::new($label).small());
                                             ui.add(egui::Slider::new($val, $min..=$max).show_value(true));
                                         });
                                     }
                                 }
-                                sld!(ui, "kscale   ", &mut fp.kscale,      0.1, 5.0);
-                                sld!(ui, "speed    ", &mut fp.speed,       0.0, 2.0);
-                                sld!(ui, "field_mix", &mut fp.field_mix,   0.0, 1.0);
-                                sld!(ui, "iso_level", &mut fp.iso_level,   0.0, 1.0);
-                                sld!(ui, "color_sft", &mut fp.color_shift, 0.0, 1.0);
-                                sld!(ui, "zoom     ", &mut fp.zoom,        0.2, 5.0);
-                                sld!(ui, "w_lattice", &mut fp.w_lattice,   0.0, 2.0);
-                                sld!(ui, "w_motif  ", &mut fp.w_motif,     0.0, 2.0);
-                                sld!(ui, "w_band   ", &mut fp.w_band,      0.0, 2.0);
+                                sld!(ui, "kscale   ", &mut fp.kscale,      &mut lfo.kscale,      0.1, 5.0);
+                                sld!(ui, "speed    ", &mut fp.speed,       &mut lfo.speed,       0.0, 2.0);
+                                sld!(ui, "field_mix", &mut fp.field_mix,   &mut lfo.field_mix,   0.0, 1.0);
+                                sld!(ui, "iso_level", &mut fp.iso_level,   &mut lfo.iso_level,   0.0, 1.0);
+                                sld!(ui, "color_sft", &mut fp.color_shift, &mut lfo.color_shift, 0.0, 1.0);
+                                sld!(ui, "zoom     ", &mut fp.zoom,        &mut lfo.zoom,        0.2, 5.0);
+                                sld!(ui, "w_lattice", &mut fp.w_lattice,   &mut lfo.w_lattice,   0.0, 2.0);
+                                sld!(ui, "w_motif  ", &mut fp.w_motif,     &mut lfo.w_motif,     0.0, 2.0);
+                                sld!(ui, "w_band   ", &mut fp.w_band,      &mut lfo.w_band,      0.0, 2.0);
+
+                                ui.separator();
+                                ui.label(egui::RichText::new("LFO  (sin)")
+                                    .small().color(egui::Color32::from_rgb(80, 220, 120)));
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("rate ").small());
+                                    ui.add(egui::Slider::new(&mut lfo.rate, 0.01..=4.0)
+                                        .show_value(true).suffix(" Hz"));
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("depth").small());
+                                    ui.add(egui::Slider::new(&mut lfo.depth, 0.0..=1.0)
+                                        .show_value(true));
+                                });
 
                                 ui.separator();
 
@@ -613,6 +692,7 @@ impl ApplicationHandler for App {
 
                 // ── Apply UI mutations (closure is dropped, borrows released) ──
                 self.field_params = fp;
+                self.lfo          = lfo;
                 self.search_str   = search;
                 if req.panel_toggle { self.panel_open = !cur_panel_open; }
 
