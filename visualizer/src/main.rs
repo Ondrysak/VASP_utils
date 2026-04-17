@@ -636,47 +636,63 @@ impl ApplicationHandler for App {
 
                                 ui.separator();
 
-                                // Sliders — [~] LFO toggle  [·/A/B/M/T] mic source
+                                // Sliders — [~] LFO  [·/A/B/M/T] mic  label  [====slider====]  eff
                                 ui.label(egui::RichText::new("FIELD PARAMETERS")
                                     .small().color(egui::Color32::from_rgb(120, 120, 160)));
                                 macro_rules! sld {
-                                    ($ui:expr, $label:literal, $val:expr,
+                                    ($ui:expr, $label:literal, $val:expr, $eff:expr,
                                      $lfo_en:expr, $mic_src:expr, $min:expr, $max:expr) => {
                                         $ui.horizontal(|ui| {
-                                            // LFO toggle
+                                            // [~] LFO toggle — normal sized button, coloured text
                                             let lc = if *$lfo_en {
                                                 egui::Color32::from_rgb(80, 220, 120)
                                             } else {
-                                                egui::Color32::from_gray(80)
+                                                egui::Color32::from_gray(90)
                                             };
                                             if ui.add(egui::Button::new(
-                                                egui::RichText::new("~").color(lc).small()
-                                            ).small()).clicked() { *$lfo_en = !*$lfo_en; }
+                                                egui::RichText::new("~").color(lc)
+                                            ).min_size(egui::vec2(18.0, 18.0))).clicked() {
+                                                *$lfo_en = !*$lfo_en;
+                                            }
 
-                                            // Mic source cycle button
-                                            let mc = $mic_src.color();
-                                            let ml = $mic_src.label();
+                                            // [·/A/B/M/T] mic source — cycles on click
+                                            let mc = (*$mic_src).color();
+                                            let ml = (*$mic_src).label();
                                             if ui.add(egui::Button::new(
-                                                egui::RichText::new(ml).color(mc).small()
-                                            ).small()).clicked() {
+                                                egui::RichText::new(ml).color(mc)
+                                            ).min_size(egui::vec2(18.0, 18.0))).clicked() {
                                                 let ns = (*$mic_src).next();
                                                 *$mic_src = ns;
                                             }
 
                                             ui.label(egui::RichText::new($label).small());
-                                            ui.add(egui::Slider::new($val, $min..=$max).show_value(true));
+                                            ui.add(egui::Slider::new($val, $min..=$max)
+                                                .show_value(false));
+
+                                            // effective value: dim if same as base, orange if modulated
+                                            let eff_v: f32 = $eff;
+                                            let base_v: f32 = *$val;
+                                            let modulated = (eff_v - base_v).abs() > 0.001;
+                                            let eff_col = if modulated {
+                                                egui::Color32::from_rgb(255, 160, 60)
+                                            } else {
+                                                egui::Color32::from_gray(130)
+                                            };
+                                            ui.label(egui::RichText::new(
+                                                format!("{:.2}", eff_v)
+                                            ).small().color(eff_col));
                                         });
                                     }
                                 }
-                                sld!(ui, "kscale   ", &mut fp.kscale,      &mut lfo.kscale,      &mut mic.kscale,      0.1_f32, 5.0_f32);
-                                sld!(ui, "speed    ", &mut fp.speed,       &mut lfo.speed,       &mut mic.speed,       0.0_f32, 2.0_f32);
-                                sld!(ui, "field_mix", &mut fp.field_mix,   &mut lfo.field_mix,   &mut mic.field_mix,   0.0_f32, 1.0_f32);
-                                sld!(ui, "iso_level", &mut fp.iso_level,   &mut lfo.iso_level,   &mut mic.iso_level,   0.0_f32, 1.0_f32);
-                                sld!(ui, "color_sft", &mut fp.color_shift, &mut lfo.color_shift, &mut mic.color_shift, 0.0_f32, 1.0_f32);
-                                sld!(ui, "zoom     ", &mut fp.zoom,        &mut lfo.zoom,        &mut mic.zoom,        0.2_f32, 5.0_f32);
-                                sld!(ui, "w_lattice", &mut fp.w_lattice,   &mut lfo.w_lattice,   &mut mic.w_lattice,   0.0_f32, 2.0_f32);
-                                sld!(ui, "w_motif  ", &mut fp.w_motif,     &mut lfo.w_motif,     &mut mic.w_motif,     0.0_f32, 2.0_f32);
-                                sld!(ui, "w_band   ", &mut fp.w_band,      &mut lfo.w_band,      &mut mic.w_band,      0.0_f32, 2.0_f32);
+                                sld!(ui, "kscale   ", &mut fp.kscale,      fp_eff.kscale,      &mut lfo.kscale,      &mut mic.kscale,      0.1_f32, 5.0_f32);
+                                sld!(ui, "speed    ", &mut fp.speed,       fp_eff.speed,       &mut lfo.speed,       &mut mic.speed,       0.0_f32, 2.0_f32);
+                                sld!(ui, "field_mix", &mut fp.field_mix,   fp_eff.field_mix,   &mut lfo.field_mix,   &mut mic.field_mix,   0.0_f32, 1.0_f32);
+                                sld!(ui, "iso_level", &mut fp.iso_level,   fp_eff.iso_level,   &mut lfo.iso_level,   &mut mic.iso_level,   0.0_f32, 1.0_f32);
+                                sld!(ui, "color_sft", &mut fp.color_shift, fp_eff.color_shift, &mut lfo.color_shift, &mut mic.color_shift, 0.0_f32, 1.0_f32);
+                                sld!(ui, "zoom     ", &mut fp.zoom,        fp_eff.zoom,        &mut lfo.zoom,        &mut mic.zoom,        0.2_f32, 5.0_f32);
+                                sld!(ui, "w_lattice", &mut fp.w_lattice,   fp_eff.w_lattice,   &mut lfo.w_lattice,   &mut mic.w_lattice,   0.0_f32, 2.0_f32);
+                                sld!(ui, "w_motif  ", &mut fp.w_motif,     fp_eff.w_motif,     &mut lfo.w_motif,     &mut mic.w_motif,     0.0_f32, 2.0_f32);
+                                sld!(ui, "w_band   ", &mut fp.w_band,      fp_eff.w_band,      &mut lfo.w_band,      &mut mic.w_band,      0.0_f32, 2.0_f32);
 
                                 ui.separator();
 
