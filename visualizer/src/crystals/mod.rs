@@ -1,5 +1,5 @@
 //! Built-in crystal library: 34 hand-coded structures (all 7 systems)
-//! plus ~50 structures auto-fetched from the Materials Project API (crystals_mp submodule).
+//! plus 78 structures auto-fetched from the Materials Project API (11 thematic groups).
 
 pub mod mp;  // auto-generated: src/crystals_mp.rs → mod mp
 

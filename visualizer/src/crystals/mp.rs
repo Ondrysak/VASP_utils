@@ -1,9 +1,9 @@
 // Auto-generated from Materials Project API – do not edit manually.
 // Run: python3 fetch_mp.py > src/crystals_mp.rs
 
+use crate::poscar::{frac_to_cart, Crystal, Atom};
 use crate::symmetry::CrystalSystem;
-use super::CrystalDef;
-use super::{fracs, zvals, syms};
+use super::{CrystalDef, fracs, zvals, syms};
 
 pub static TOPOLOGICAL: &[CrystalDef] = &[
     CrystalDef {
@@ -37,6 +37,22 @@ pub static TOPOLOGICAL: &[CrystalDef] = &[
         lat_raw:[[0.866,0.0,0.5],[0.2887,0.8165,0.5],[0.0,-0.0,1.0]],
         fracs: fracs![[0.25,0.25,0.25], [0.0,-0.0,-0.0]],
         z_vals: zvals![49, 33], symbols: syms!["In", "As"],
+    },
+    CrystalDef {
+        name:"WTe2 (Type-II Weyl Semimetal)", space_group:"F-43m (#216)", sp_number:216,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.5667,0.6333,0.4667], a:4.0305,
+        lat_raw:[[0.866,0.0,0.5],[0.2887,0.8165,0.5],[0.0,0.0,1.0]],
+        fracs: fracs![[0.75,0.75,0.75], [0.25,0.25,0.25], [0.0,0.0,-0.0]],
+        z_vals: zvals![3, 30, 15], symbols: syms!["Li", "Zn", "P"],
+    },
+    CrystalDef {
+        name:"Bi (Semimetal)", space_group:"P6_3mc (#186)", sp_number:186,
+        system:CrystalSystem::Hexagonal, lattice_type:"P", point_group:"?",
+        color:[0.65,0.55,0.5], a:4.1688,
+        lat_raw:[[1.0,0.0,0.0],[-0.5,0.866,0.0],[0.0,0.0,1.6263]],
+        fracs: fracs![[0.6667,0.3333,0.5002], [0.3333,0.6667,0.0002], [0.6667,0.3333,0.8768], [0.3333,0.6667,0.3768]],
+        z_vals: zvals![48, 48, 16, 16], symbols: syms!["Cd", "Cd", "S", "S"],
     },
 ];
 
@@ -81,6 +97,22 @@ pub static SUPERCONDUCTORS: &[CrystalDef] = &[
         fracs: fracs![[-0.0,-0.0,-0.0]],
         z_vals: zvals![41], symbols: syms!["Nb"],
     },
+    CrystalDef {
+        name:"NbSe2 (CDW Superconductor)", space_group:"Pnma (#62)", sp_number:62,
+        system:CrystalSystem::Orthorhombic, lattice_type:"P", point_group:"?",
+        color:[0.6,0.55,0.55], a:2.8583,
+        lat_raw:[[1.0,-0.0,0.0],[0.0,1.5959,0.0],[0.0,0.0,3.212]],
+        fracs: fracs![[0.25,0.464,0.6344], [0.75,0.536,0.3656], [0.75,0.964,0.8656], [0.25,0.036,0.1344], [0.25,0.16,0.7749], [0.75,0.84,0.2251], [0.75,0.66,0.7251], [0.25,0.34,0.2749], [0.25,0.7845,0.9693], [0.75,0.2155,0.0307], [0.25,0.7155,0.4693], [0.75,0.2845,0.5307]],
+        z_vals: zvals![25, 25, 25, 25, 8, 8, 8, 8, 8, 8, 8, 8], symbols: syms!["Mn", "Mn", "Mn", "Mn", "O", "O", "O", "O", "O", "O", "O", "O"],
+    },
+    CrystalDef {
+        name:"TiN (Hard Superconductor)", space_group:"F-43m (#216)", sp_number:216,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.9,0.5,0.2], a:2.564,
+        lat_raw:[[0.0,0.7071,0.7071],[0.7071,0.0,0.7071],[0.7071,0.7071,0.0]],
+        fracs: fracs![[0.0,0.0,0.0], [0.25,0.25,0.25]],
+        z_vals: zvals![5, 7], symbols: syms!["B", "N"],
+    },
 ];
 
 pub static LAYERED_2D: &[CrystalDef] = &[
@@ -123,6 +155,22 @@ pub static LAYERED_2D: &[CrystalDef] = &[
         lat_raw:[[1.0,0.0,0.0],[0.0,0.9449,0.0],[0.0,0.212,0.926]],
         fracs: fracs![[0.6389,0.327,0.6549], [0.1389,0.173,0.3451], [0.3611,0.673,0.3451], [0.8611,0.827,0.6549], [0.5684,0.1942,0.2], [0.0684,0.3058,0.8], [0.4316,0.8058,0.8], [0.9316,0.6942,0.2], [0.7606,0.0134,0.9129], [0.2606,0.4866,0.0871], [0.2394,0.9866,0.0871], [0.7394,0.5134,0.9129], [0.6322,0.7917,0.4282], [0.1322,0.7083,0.5718], [0.3678,0.2083,0.5718], [0.8678,0.2917,0.4282]],
         z_vals: zvals![3, 3, 3, 3, 57, 57, 57, 57, 8, 8, 8, 8, 8, 8, 8, 8], symbols: syms!["Li", "Li", "Li", "Li", "La", "La", "La", "La", "O", "O", "O", "O", "O", "O", "O", "O"],
+    },
+    CrystalDef {
+        name:"MoTe2 (Topological TMD)", space_group:"P6_3/mmc (#194)", sp_number:194,
+        system:CrystalSystem::Hexagonal, lattice_type:"P", point_group:"?",
+        color:[0.65,0.55,0.5], a:3.1854,
+        lat_raw:[[1.0,0.0,0.0],[-0.5,0.866,0.0],[0.0,0.0001,4.1371]],
+        fracs: fracs![[-0.0,-0.0,0.25], [0.0,0.0,0.75], [0.3333,0.6667,0.3677], [0.6667,0.3333,0.6323], [0.6666,0.3333,0.8677], [0.3334,0.6667,0.1323]],
+        z_vals: zvals![42, 42, 16, 16, 16, 16], symbols: syms!["Mo", "Mo", "S", "S", "S", "S"],
+    },
+    CrystalDef {
+        name:"Bi2S3 (Layered Semiconductor)", space_group:"P6_3/mmc (#194)", sp_number:194,
+        system:CrystalSystem::Hexagonal, lattice_type:"P", point_group:"?",
+        color:[0.8,0.3,0.7], a:3.5657,
+        lat_raw:[[1.0,0.0,0.0],[-0.5,0.866,-0.0],[0.0,-0.0,4.108]],
+        fracs: fracs![[0.3333,0.6667,0.6278], [0.6667,0.3333,0.1278], [0.6667,0.3333,0.3722], [0.3333,0.6667,0.8722], [0.3333,0.6667,0.25], [0.6667,0.3333,0.75]],
+        z_vals: zvals![52, 52, 52, 52, 42, 42], symbols: syms!["Te", "Te", "Te", "Te", "Mo", "Mo"],
     },
 ];
 
@@ -218,6 +266,22 @@ pub static ENERGY: &[CrystalDef] = &[
         fracs: fracs![[0.3547,0.0643,0.6452], [0.1452,0.4357,0.8547], [0.6453,0.9357,0.3548], [0.8548,0.5643,0.1453], [0.5554,0.75,0.0554], [0.25,0.75,0.4446], [0.0554,0.25,0.25], [0.75,0.25,0.5554], [0.4447,0.25,0.9446], [0.9446,0.75,0.75]],
         z_vals: zvals![26, 26, 26, 26, 8, 8, 8, 8, 8, 8], symbols: syms!["Fe", "Fe", "Fe", "Fe", "O", "O", "O", "O", "O", "O"],
     },
+    CrystalDef {
+        name:"CeO2 (Fuel Cell Oxide)", space_group:"Fm-3m (#225)", sp_number:225,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.8,0.7,0.3], a:3.8661,
+        lat_raw:[[0.866,0.0,0.5],[0.2887,0.8165,0.5],[0.0,0.0,1.0]],
+        fracs: fracs![[0.0,0.0,0.0], [0.75,0.75,0.75], [0.25,0.25,0.25]],
+        z_vals: zvals![58, 8, 8], symbols: syms!["Ce", "O", "O"],
+    },
+    CrystalDef {
+        name:"Li2O2 (Li-Air Cathode)", space_group:"R-3m (#166)", sp_number:166,
+        system:CrystalSystem::Trigonal, lattice_type:"P", point_group:"?",
+        color:[0.4,0.7,0.6], a:6.2692,
+        lat_raw:[[0.5469,0.003,0.8372],[0.2514,0.4857,0.8372],[0.0048,0.003,1.0]],
+        fracs: fracs![[-0.0,0.0,-0.0], [0.7408,0.7408,0.7408], [0.2592,0.2592,0.2592]],
+        z_vals: zvals![27, 17, 17], symbols: syms!["Co", "Cl", "Cl"],
+    },
 ];
 
 pub static SEMICONDUCTORS: &[CrystalDef] = &[
@@ -254,7 +318,7 @@ pub static SEMICONDUCTORS: &[CrystalDef] = &[
         z_vals: zvals![30, 30, 8, 8], symbols: syms!["Zn", "Zn", "O", "O"],
     },
     CrystalDef {
-        name:"CdTe (Solar Cell CdTe)", space_group:"F-43m (#216)", sp_number:216,
+        name:"CdTe (Solar Cell)", space_group:"F-43m (#216)", sp_number:216,
         system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
         color:[0.4,0.7,0.6], a:3.8094,
         lat_raw:[[0.866,0.0,0.5],[0.2887,0.8165,0.5],[0.0,0.0,1.0]],
@@ -284,6 +348,22 @@ pub static SEMICONDUCTORS: &[CrystalDef] = &[
         lat_raw:[[0.866,0.0,0.5],[0.2887,0.8165,0.5],[0.0,0.0,1.0]],
         fracs: fracs![[0.25,0.25,0.25], [0.0,-0.0,-0.0]],
         z_vals: zvals![14, 6], symbols: syms!["Si", "C"],
+    },
+    CrystalDef {
+        name:"InAs (III-V Narrow-gap)", space_group:"F-43m (#216)", sp_number:216,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.4,0.7,0.6], a:4.0134,
+        lat_raw:[[0.866,-0.0,0.5],[0.2887,0.8165,0.5],[-0.0,-0.0,1.0]],
+        fracs: fracs![[0.0,0.0,0.0], [0.25,0.25,0.25]],
+        z_vals: zvals![13, 33], symbols: syms!["Al", "As"],
+    },
+    CrystalDef {
+        name:"GaAs (III-V Semiconductor)", space_group:"F-43m (#216)", sp_number:216,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.5,0.8,0.3], a:3.87,
+        lat_raw:[[0.866,-0.0,0.5],[0.2887,0.8165,0.5],[-0.0,-0.0,1.0]],
+        fracs: fracs![[0.0,-0.0,0.0], [0.25,0.25,0.25]],
+        z_vals: zvals![13, 15], symbols: syms!["Al", "P"],
     },
 ];
 
@@ -360,6 +440,46 @@ pub static METALS: &[CrystalDef] = &[
         fracs: fracs![[0.0,-0.0,0.0], [0.3333,0.6667,0.5], [0.6667,0.3333,0.5]],
         z_vals: zvals![22, 22, 22], symbols: syms!["Ti", "Ti", "Ti"],
     },
+    CrystalDef {
+        name:"Ir (FCC Hard Metal)", space_group:"Fm-3m (#225)", sp_number:225,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.7,0.9,0.4], a:2.7251,
+        lat_raw:[[0.866,-0.0,0.5],[0.2887,0.8165,0.5],[0.0,-0.0,1.0]],
+        fracs: fracs![[0.0,-0.0,0.0]],
+        z_vals: zvals![77], symbols: syms!["Ir"],
+    },
+    CrystalDef {
+        name:"Ru (HCP Catalyst)", space_group:"P6_3/mmc (#194)", sp_number:194,
+        system:CrystalSystem::Hexagonal, lattice_type:"P", point_group:"?",
+        color:[0.8,0.3,0.7], a:2.7078,
+        lat_raw:[[1.0,-0.0,0.0],[-0.5,0.866,0.0],[-0.0,0.0,1.5762]],
+        fracs: fracs![[0.3333,0.6667,0.25], [0.6667,0.3333,0.75]],
+        z_vals: zvals![44, 44], symbols: syms!["Ru", "Ru"],
+    },
+    CrystalDef {
+        name:"Cr (BCC Antiferromagnet)", space_group:"Im-3m (#229)", sp_number:229,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.7,0.9,0.4], a:2.7456,
+        lat_raw:[[0.9428,0.0,-0.3333],[-0.4714,0.8165,-0.3333],[-0.0,-0.0,1.0]],
+        fracs: fracs![[0.0,0.0,-0.0]],
+        z_vals: zvals![74], symbols: syms!["W"],
+    },
+    CrystalDef {
+        name:"Co (HCP Magnet)", space_group:"P6_3/mmc (#194)", sp_number:194,
+        system:CrystalSystem::Hexagonal, lattice_type:"P", point_group:"?",
+        color:[0.3,0.6,0.9], a:2.472,
+        lat_raw:[[1.0,0.0,-0.0],[-0.5,0.866,-0.0],[0.0,-0.0,1.6267]],
+        fracs: fracs![[0.3333,0.6667,0.25], [0.6667,0.3333,0.75]],
+        z_vals: zvals![27, 27], symbols: syms!["Co", "Co"],
+    },
+    CrystalDef {
+        name:"Mo (BCC Refractory)", space_group:"Fm-3m (#225)", sp_number:225,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.8,0.3,0.7], a:2.6912,
+        lat_raw:[[0.866,0.0,0.5],[0.2887,0.8165,0.5],[-0.0,-0.0,1.0]],
+        fracs: fracs![[0.0,0.0,0.0]],
+        z_vals: zvals![45], symbols: syms!["Rh"],
+    },
 ];
 
 pub static FUNCTIONAL: &[CrystalDef] = &[
@@ -394,6 +514,84 @@ pub static FUNCTIONAL: &[CrystalDef] = &[
         lat_raw:[[0.8661,0.0,-0.4999],[-0.2886,0.8166,-0.4999],[0.0012,0.0017,1.0023]],
         fracs: fracs![[0.75,0.25,0.5], [0.25,0.75,0.5], [0.5,0.5,-0.0], [-0.0,0.0,-0.0], [0.771,0.271,-0.0], [0.729,0.771,0.0], [0.271,0.229,-0.0], [0.229,0.729,0.0], [0.25,0.25,0.5], [0.75,0.75,0.5]],
         z_vals: zvals![38, 38, 22, 22, 8, 8, 8, 8, 8, 8], symbols: syms!["Sr", "Sr", "Ti", "Ti", "O", "O", "O", "O", "O", "O"],
+    },
+    CrystalDef {
+        name:"SrTiO3 (Quantum Paraelectric)", space_group:"Pbca (#61)", sp_number:61,
+        system:CrystalSystem::Orthorhombic, lattice_type:"P", point_group:"?",
+        color:[0.55,0.45,0.8], a:5.7551,
+        lat_raw:[[1.0,0.0,0.0],[0.0,1.0253,0.0],[0.0,0.0,1.4126]],
+        fracs: fracs![[0.5,-0.0,0.5], [-0.0,0.5,0.5], [0.5,0.5,-0.0], [-0.0,-0.0,-0.0], [0.6105,0.1186,0.0899], [0.1105,0.3814,0.9101], [0.3895,0.6186,0.4101], [0.8895,0.8814,0.5899], [0.1105,0.1186,0.4101], [0.6105,0.3814,0.5899], [0.8895,0.6186,0.0899], [0.3895,0.8814,0.9101]],
+        z_vals: zvals![46, 46, 46, 46, 34, 34, 34, 34, 34, 34, 34, 34], symbols: syms!["Pd", "Pd", "Pd", "Pd", "Se", "Se", "Se", "Se", "Se", "Se", "Se", "Se"],
+    },
+    CrystalDef {
+        name:"LaAlO3 (2DEG Interface)", space_group:"Pnma (#62)", sp_number:62,
+        system:CrystalSystem::Orthorhombic, lattice_type:"P", point_group:"?",
+        color:[0.7,0.5333,0.4333], a:4.9605,
+        lat_raw:[[1.0,0.0,0.0],[0.0,1.1486,0.0],[0.0,0.0,1.604]],
+        fracs: fracs![[0.25,0.2598,0.4152], [0.75,0.7402,0.5848], [0.25,0.7598,0.0848], [0.75,0.2402,0.9152], [0.25,0.4137,0.7624], [0.75,0.5863,0.2376], [0.25,0.9137,0.7376], [0.75,0.0863,0.2624], [0.0251,0.9119,0.8196], [0.5251,0.0881,0.1804], [0.4749,0.4119,0.6804], [0.9749,0.5881,0.3196], [0.75,0.0972,0.4235], [0.25,0.9028,0.5765], [0.75,0.5972,0.0765], [0.25,0.4028,0.9235], [0.9749,0.0881,0.1804], [0.4749,0.9119,0.8196], [0.5251,0.5881,0.3196], [0.0251,0.4119,0.6804]],
+        z_vals: zvals![20, 20, 20, 20, 6, 6, 6, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8], symbols: syms!["Ca", "Ca", "Ca", "Ca", "C", "C", "C", "C", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+    },
+];
+
+pub static THERMOELECTRICS: &[CrystalDef] = &[
+    CrystalDef {
+        name:"PbTe (Classic Thermoelectric)", space_group:"Fm-3m (#225)", sp_number:225,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.75,0.6,0.55], a:4.6257,
+        lat_raw:[[0.866,0.0,0.5],[0.2887,0.8165,0.5],[-0.0,-0.0,1.0]],
+        fracs: fracs![[-0.0,-0.0,0.0], [0.5,0.5,0.5]],
+        z_vals: zvals![52, 82], symbols: syms!["Te", "Pb"],
+    },
+    CrystalDef {
+        name:"GeTe (Phase-change TE)", space_group:"R3m (#160)", sp_number:160,
+        system:CrystalSystem::Trigonal, lattice_type:"P", point_group:"?",
+        color:[0.55,0.45,0.8], a:4.4028,
+        lat_raw:[[0.8442,0.0094,0.536],[0.2993,0.7894,0.536],[0.0135,0.0094,0.9999]],
+        fracs: fracs![[0.9922,0.9922,0.9922], [0.5288,0.5288,0.5288]],
+        z_vals: zvals![32, 52], symbols: syms!["Ge", "Te"],
+    },
+    CrystalDef {
+        name:"CoSb3 (Skutterudite TE)", space_group:"P2_12_12_1 (#19)", sp_number:19,
+        system:CrystalSystem::Orthorhombic, lattice_type:"P", point_group:"?",
+        color:[0.5,0.8,0.3], a:5.5825,
+        lat_raw:[[1.0,0.0,0.0],[0.0,1.0749,0.0],[0.0,0.0,1.8009]],
+        fracs: fracs![[0.0957,0.5863,0.9658], [0.5957,0.4137,0.5342], [0.4043,0.0863,0.0342], [0.9043,0.9137,0.4658], [0.3667,0.8632,0.6676], [0.8667,0.1368,0.8324], [0.1333,0.3632,0.3324], [0.6333,0.6368,0.1676], [0.8634,0.6932,0.716], [0.3634,0.3068,0.784], [0.6366,0.1932,0.284], [0.1366,0.8068,0.216], [0.5969,0.5706,0.8666], [0.0969,0.4294,0.6334], [0.9031,0.0706,0.1334], [0.4031,0.9294,0.3666]],
+        z_vals: zvals![11, 11, 11, 11, 11, 11, 11, 11, 15, 15, 15, 15, 15, 15, 15, 15], symbols: syms!["Na", "Na", "Na", "Na", "Na", "Na", "Na", "Na", "P", "P", "P", "P", "P", "P", "P", "P"],
+    },
+    CrystalDef {
+        name:"Cu2Se (Liquid-like TE)", space_group:"I4/mmm (#139)", sp_number:139,
+        system:CrystalSystem::Tetragonal, lattice_type:"P", point_group:"?",
+        color:[0.6667,0.6667,0.4667], a:4.9892,
+        lat_raw:[[0.9624,-0.0,-0.2717],[-0.0767,0.9593,-0.2717],[-0.028,-0.0303,1.741]],
+        fracs: fracs![[0.6418,0.6418,0.2837], [0.3582,0.3582,0.7163], [-0.0,-0.0,-0.0], [-0.0,0.5,-0.0], [0.5,-0.0,-0.0], [0.8373,0.8373,0.6747], [0.1627,0.1627,0.3253]],
+        z_vals: zvals![56, 56, 40, 16, 16, 16, 16], symbols: syms!["Ba", "Ba", "Zr", "S", "S", "S", "S"],
+    },
+    CrystalDef {
+        name:"SnSe (Record TE ZT>2.6)", space_group:"Fm-3m (#225)", sp_number:225,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.5,0.75,0.65], a:4.3035,
+        lat_raw:[[0.866,-0.0,0.5],[0.2887,0.8165,0.5],[-0.0,-0.0,1.0]],
+        fracs: fracs![[0.5,0.5,0.5], [0.0,-0.0,0.0]],
+        z_vals: zvals![58, 33], symbols: syms!["Ce", "As"],
+    },
+];
+
+pub static HALIDE_PEROV: &[CrystalDef] = &[
+    CrystalDef {
+        name:"CsPbBr3 (Green LED Perovskite)", space_group:"Pm-3m (#221)", sp_number:221,
+        system:CrystalSystem::Cubic, lattice_type:"P", point_group:"?",
+        color:[0.5667,0.8,0.5667], a:5.9486,
+        lat_raw:[[1.0,-0.0,-0.0],[-0.0,1.0,0.0],[-0.0,0.0,1.0]],
+        fracs: fracs![[0.0,0.0,0.0], [0.5,0.5,0.5], [0.5,0.5,0.0], [0.5,-0.0,0.5], [-0.0,0.5,0.5]],
+        z_vals: zvals![55, 82, 35, 35, 35], symbols: syms!["Cs", "Pb", "Br", "Br", "Br"],
+    },
+    CrystalDef {
+        name:"CsPbCl3 (Blue LED Perovskite)", space_group:"Pnma (#62)", sp_number:62,
+        system:CrystalSystem::Orthorhombic, lattice_type:"P", point_group:"?",
+        color:[0.5667,0.8,0.5667], a:8.1011,
+        lat_raw:[[1.0,-0.0,0.0],[-0.0,1.0435,0.0],[0.0,0.0,1.4663]],
+        fracs: fracs![[0.5195,0.4398,0.25], [0.0195,0.0602,0.75], [0.9805,0.9398,0.25], [0.4805,0.5602,0.75], [0.5,-0.0,0.5], [0.0,0.5,0.0], [0.0,0.5,0.5], [0.5,-0.0,0.0], [0.5597,0.9937,0.75], [0.0597,0.5063,0.25], [0.8028,0.201,0.0317], [0.1972,0.799,0.9683], [0.3028,0.299,0.9683], [0.6972,0.701,0.0317], [0.3028,0.299,0.5317], [0.6972,0.701,0.4683], [0.1972,0.799,0.5317], [0.8028,0.201,0.4683], [0.9403,0.4937,0.75], [0.4403,0.0063,0.25]],
+        z_vals: zvals![55, 55, 55, 55, 82, 82, 82, 82, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35], symbols: syms!["Cs", "Cs", "Cs", "Cs", "Pb", "Pb", "Pb", "Pb", "Br", "Br", "Br", "Br", "Br", "Br", "Br", "Br", "Br", "Br", "Br", "Br"],
     },
 ];
 
@@ -446,6 +644,22 @@ pub static MINERALS: &[CrystalDef] = &[
         fracs: fracs![[0.9095,0.2044,0.8191], [0.0905,0.7956,0.1809], [0.658,0.3175,0.3161], [0.342,0.6825,0.6839], [0.8393,0.891,0.6786], [0.1607,0.109,0.3214], [0.5048,0.7425,0.0096], [0.4952,0.2575,0.9904], [0.1735,0.5669,0.347], [0.8265,0.4331,0.653]],
         z_vals: zvals![13, 13, 13, 13, 8, 8, 8, 8, 8, 8], symbols: syms!["Al", "Al", "Al", "Al", "O", "O", "O", "O", "O", "O"],
     },
+    CrystalDef {
+        name:"MgSiO3 (Enstatite)", space_group:"P4_2/mnm (#136)", sp_number:136,
+        system:CrystalSystem::Tetragonal, lattice_type:"P", point_group:"?",
+        color:[0.6,0.55,0.55], a:5.4695,
+        lat_raw:[[-0.541,0.5947,0.5947],[0.541,-0.5947,0.5947],[0.541,0.5947,-0.5947]],
+        fracs: fracs![[0.5,0.75,0.75], [0.5,0.25,0.25], [-0.0,0.0,0.5], [-0.0,0.5,0.0], [0.3043,0.3046,0.5003], [0.1952,0.2496,0.9457], [0.3043,0.804,-0.0003], [0.8039,0.2496,0.5543], [0.1961,0.7504,0.4457], [0.8048,0.7504,0.0543], [0.6957,0.196,0.0003], [0.6957,0.6954,0.4997]],
+        z_vals: zvals![22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8], symbols: syms!["Ti", "Ti", "Ti", "Ti", "O", "O", "O", "O", "O", "O", "O", "O"],
+    },
+    CrystalDef {
+        name:"CaCO3 (Calcite)", space_group:"I-42d (#122)", sp_number:122,
+        system:CrystalSystem::Tetragonal, lattice_type:"P", point_group:"?",
+        color:[0.4333,0.7333,0.5], a:5.2868,
+        lat_raw:[[0.9103,-0.0,-0.414],[-0.1883,0.8906,-0.414],[0.0044,0.0054,1.2173]],
+        fracs: fracs![[0.5,0.5,0.0], [0.75,0.25,0.5], [0.25,0.75,0.5], [0.0,-0.0,0.0], [0.8678,0.875,0.25], [0.625,0.1322,0.75], [0.3822,0.375,0.25], [0.125,0.6178,0.75]],
+        z_vals: zvals![13, 13, 29, 29, 16, 16, 16, 16], symbols: syms!["Al", "Al", "Cu", "Cu", "S", "S", "S", "S"],
+    },
 ];
 
 pub fn mp_groups() -> Vec<(&'static str, egui::Color32, &'static [CrystalDef])> {
@@ -458,6 +672,8 @@ pub fn mp_groups() -> Vec<(&'static str, egui::Color32, &'static [CrystalDef])> 
         ("SEMICONDUCTORS", egui::Color32::from_rgb(100,200,100), SEMICONDUCTORS),
         ("METALS", egui::Color32::from_rgb(200,200,200), METALS),
         ("FUNCTIONAL", egui::Color32::from_rgb(255,140, 80), FUNCTIONAL),
+        ("THERMOELECTRICS", egui::Color32::from_rgb(255,100,160), THERMOELECTRICS),
+        ("HALIDE_PEROV", egui::Color32::from_rgb(255,230,100), HALIDE_PEROV),
         ("MINERALS", egui::Color32::from_rgb(180,160,120), MINERALS),
     ]
 }

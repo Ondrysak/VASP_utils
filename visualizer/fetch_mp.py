@@ -122,6 +122,9 @@ CURATED = [
     ("mp-2286",    "SnTe (Topological Crystalline)",    "TOPOLOGICAL"),
     ("mp-20305",   "Pb2SnTe2 (TCI)",                   "TOPOLOGICAL"),
     ("mp-22598",   "Sb2Te3 (Topological Insulator)",   "TOPOLOGICAL"),
+    ("mp-569572",  "TaAs (Weyl Semimetal)",             "TOPOLOGICAL"),
+    ("mp-10182",   "WTe2 (Type-II Weyl Semimetal)",    "TOPOLOGICAL"),
+    ("mp-672",     "Bi (Semimetal)",                    "TOPOLOGICAL"),
 
     # ── Superconductors ───────────────────────────────────────────────
     ("mp-763",     "MgB2 (Superconductor 39K)",         "SUPERCONDUCTORS"),
@@ -129,6 +132,9 @@ CURATED = [
     ("mp-23",      "Nb (BCC Superconductor 9K)",        "SUPERCONDUCTORS"),
     ("mp-7643",    "V3Si (A15 Superconductor)",         "SUPERCONDUCTORS"),
     ("mp-8636",    "Nb3Sn (A15 Superconductor 18K)",   "SUPERCONDUCTORS"),
+    ("mp-19326",   "NbSe2 (CDW Superconductor)",       "SUPERCONDUCTORS"),
+    ("mp-20561",   "FeSe (Iron Selenide SC)",           "SUPERCONDUCTORS"),
+    ("mp-1639",    "TiN (Hard Superconductor)",        "SUPERCONDUCTORS"),
 
     # ── 2-D / Layered ─────────────────────────────────────────────────
     ("mp-2815",    "MoS2 (2D Semiconductor)",           "LAYERED_2D"),
@@ -137,6 +143,8 @@ CURATED = [
     ("mp-1634",    "BN (Hexagonal Boron Nitride)",      "LAYERED_2D"),
     ("mp-1020057", "MoSe2 (2D TMD)",                   "LAYERED_2D"),
     ("mp-27711",   "SnS2 (2D Semiconductor)",           "LAYERED_2D"),
+    ("mp-1018809", "MoTe2 (Topological TMD)",          "LAYERED_2D"),
+    ("mp-602",     "Bi2S3 (Layered Semiconductor)",    "LAYERED_2D"),
 
     # ── Magnets ───────────────────────────────────────────────────────
     ("mp-19306",   "Fe3O4 (Magnetite)",                 "MAGNETIC"),
@@ -145,6 +153,8 @@ CURATED = [
     ("mp-568",     "MnO (Antiferromagnet)",             "MAGNETIC"),
     ("mp-18759",   "CrO2 (Half-metal Magnet)",          "MAGNETIC"),
     ("mp-19079",   "MnBi (Permanent Magnet)",           "MAGNETIC"),
+    ("mp-545483",  "BiFeO3 (Room-T Multiferroic)",     "MAGNETIC"),
+    ("mp-25017",   "Cr2O3 (Chromia AFM)",              "MAGNETIC"),
 
     # ── Battery / Energy ──────────────────────────────────────────────
     ("mp-22526",   "LiCoO2 (Layered Cathode)",          "ENERGY"),
@@ -153,16 +163,20 @@ CURATED = [
     ("mp-18921",   "NaCoO2 (Na-ion Cathode)",           "ENERGY"),
     ("mp-25279",   "V2O5 (Intercalation Cathode)",      "ENERGY"),
     ("mp-19770",   "TiS2 (2D Cathode)",                 "ENERGY"),
+    ("mp-20194",   "CeO2 (Fuel Cell Oxide)",           "ENERGY"),
+    ("mp-23240",   "Li2O2 (Li-Air Cathode)",           "ENERGY"),
 
     # ── Semiconductors ────────────────────────────────────────────────
     ("mp-149",     "Si (Diamond Cubic)",                "SEMICONDUCTORS"),
     ("mp-32",      "Ge (Group-IV Semiconductor)",       "SEMICONDUCTORS"),
     ("mp-830",     "GaN (Nitride LED)",                 "SEMICONDUCTORS"),
     ("mp-2133",    "ZnO (Wide-gap Semiconductor)",      "SEMICONDUCTORS"),
-    ("mp-10695",   "CdTe (Solar Cell CdTe)",            "SEMICONDUCTORS"),
+    ("mp-10695",   "CdTe (Solar Cell)",                 "SEMICONDUCTORS"),
     ("mp-406",     "InP (III-V Semiconductor)",         "SEMICONDUCTORS"),
     ("mp-2534",    "CdS (II-VI Semiconductor)",         "SEMICONDUCTORS"),
     ("mp-8062",    "GaP (III-V Semiconductor)",         "SEMICONDUCTORS"),
+    ("mp-2172",    "InAs (III-V Narrow-gap)",           "SEMICONDUCTORS"),
+    ("mp-1550",    "GaAs (III-V Semiconductor)",       "SEMICONDUCTORS"),
 
     # ── Metals & Alloys ───────────────────────────────────────────────
     ("mp-81",      "Cu (FCC)",                          "METALS"),
@@ -175,6 +189,12 @@ CURATED = [
     ("mp-127",     "Ag (FCC)",                          "METALS"),
     ("mp-126",     "Pd (FCC Catalyst)",                 "METALS"),
     ("mp-72",      "Os (HCP)",                          "METALS"),
+    ("mp-101",     "Ir (FCC Hard Metal)",               "METALS"),
+    ("mp-33",      "Ru (HCP Catalyst)",                 "METALS"),
+    ("mp-91",      "Cr (BCC Antiferromagnet)",          "METALS"),
+    ("mp-54",      "Co (HCP Magnet)",                   "METALS"),
+    ("mp-74",      "Mo (BCC Refractory)",               "METALS"),
+    ("mp-216",     "Ta (BCC Refractory)",               "METALS"),
 
     # ── Piezo / Ferroelectric ─────────────────────────────────────────
     ("mp-5020",    "BaTiO3 (Tetragonal FE)",            "FUNCTIONAL"),
@@ -182,6 +202,23 @@ CURATED = [
     ("mp-3731",    "LiNbO3 (Electro-optic)",            "FUNCTIONAL"),
     ("mp-661",     "AlN (Piezoelectric Nitride)",       "FUNCTIONAL"),
     ("mp-4651",    "KNbO3 (Ferroelectric)",             "FUNCTIONAL"),
+    ("mp-2418",    "SrTiO3 (Quantum Paraelectric)",    "FUNCTIONAL"),
+    ("mp-4626",    "LaAlO3 (2DEG Interface)",           "FUNCTIONAL"),
+
+    # ── Thermoelectrics ───────────────────────────────────────────────
+    ("mp-19717",   "PbTe (Classic Thermoelectric)",    "THERMOELECTRICS"),
+    ("mp-938",     "GeTe (Phase-change TE)",            "THERMOELECTRICS"),
+    ("mp-7440",    "CoSb3 (Skutterudite TE)",           "THERMOELECTRICS"),
+    ("mp-3813",    "Cu2Se (Liquid-like TE)",            "THERMOELECTRICS"),
+    ("mp-2748",    "SnSe (Record TE ZT>2.6)",          "THERMOELECTRICS"),
+    ("mp-1450",    "Bi2Te2Se (TI Thermoelectric)",     "THERMOELECTRICS"),
+    ("mp-22598",   "Sb2Te3 (TE Compound)",             "THERMOELECTRICS"),  # shared with TOPO
+
+    # ── Halide Perovskites ────────────────────────────────────────────
+    ("mp-600089",  "CsPbBr3 (Green LED Perovskite)",  "HALIDE_PEROV"),
+    ("mp-1067827", "CsPbI3 (Solar Perovskite)",        "HALIDE_PEROV"),
+    ("mp-27357",   "CsSnI3 (Lead-free Perovskite)",   "HALIDE_PEROV"),
+    ("mp-567629",  "CsPbCl3 (Blue LED Perovskite)",   "HALIDE_PEROV"),
 
     # ── Minerals / Geological ─────────────────────────────────────────
     ("mp-5827",    "MgO (Periclase)",                   "MINERALS"),
@@ -191,6 +228,9 @@ CURATED = [
     ("mp-856",     "ZrO2 (Baddeleyite)",                "MINERALS"),
     ("mp-7048",    "Al2O3 (Corundum)",                  "MINERALS"),
     ("mp-4163",    "CaTiO3 (Perovskite mineral)",       "MINERALS"),
+    ("mp-2657",    "MgSiO3 (Enstatite)",               "MINERALS"),
+    ("mp-4979",    "CaCO3 (Calcite)",                  "MINERALS"),
+    ("mp-3564",    "FeS (Troilite)",                   "MINERALS"),
 ]
 
 # deduplicate by mp-id
@@ -322,15 +362,17 @@ def main():
 
     # Emit the groups() helper
     GROUP_COLORS = {
-        "TOPOLOGICAL":   "egui::Color32::from_rgb(120,220,255)",
+        "TOPOLOGICAL":    "egui::Color32::from_rgb(120,220,255)",
         "SUPERCONDUCTORS":"egui::Color32::from_rgb(180,120,255)",
-        "LAYERED_2D":    "egui::Color32::from_rgb( 80,240,180)",
-        "MAGNETIC":      "egui::Color32::from_rgb(255, 80, 80)",
-        "ENERGY":        "egui::Color32::from_rgb(255,210, 50)",
-        "SEMICONDUCTORS":"egui::Color32::from_rgb(100,200,100)",
-        "METALS":        "egui::Color32::from_rgb(200,200,200)",
-        "FUNCTIONAL":    "egui::Color32::from_rgb(255,140, 80)",
-        "MINERALS":      "egui::Color32::from_rgb(180,160,120)",
+        "LAYERED_2D":     "egui::Color32::from_rgb( 80,240,180)",
+        "MAGNETIC":       "egui::Color32::from_rgb(255, 80, 80)",
+        "ENERGY":         "egui::Color32::from_rgb(255,210, 50)",
+        "SEMICONDUCTORS": "egui::Color32::from_rgb(100,200,100)",
+        "METALS":         "egui::Color32::from_rgb(200,200,200)",
+        "FUNCTIONAL":     "egui::Color32::from_rgb(255,140, 80)",
+        "THERMOELECTRICS":"egui::Color32::from_rgb(255,100,160)",
+        "HALIDE_PEROV":   "egui::Color32::from_rgb(255,230,100)",
+        "MINERALS":       "egui::Color32::from_rgb(180,160,120)",
     }
 
     print("pub fn mp_groups() -> Vec<(&'static str, egui::Color32, &'static [CrystalDef])> {")
