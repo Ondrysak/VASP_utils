@@ -1406,6 +1406,211 @@ fn render_nodal(uv: vec2<f32>) -> vec3<f32> {
     return c;
 }
 
+// ── Mode 5: volumetric emission cloud ────────────────────────────────────
+fn render_cloud(uv: vec2<f32>) -> vec3<f32> {
+    var az = u.time*u.speed*0.1;
+    if u.mouse_down >= 0.5 { az = u.mouse.x * TAU; }
+    let el  = 0.45;
+    let cp  = vec3<f32>(sin(az)*cos(el), sin(el), cos(az)*cos(el)) * (3.0/u.zoom);
+    let fwd = normalize(-cp);
+    let rgt = normalize(cross(vec3<f32>(0.0,1.0,0.0), fwd));
+    let up  = cross(fwd, rgt);
+    let rd  = normalize(fwd + uv.x*rgt + uv.y*up);
+
+    var col      = vec3<f32>(0.0);
+    var transmit = 1.0;
+    var t        = 0.0;
+    let dt       = 0.09;
+    for (var i = 0; i < 55; i++) {
+        if t > 6.0 || transmit < 0.01 { break; }
+        let p   = cp + rd * t;
+        let f   = crystal_field(p);
+        let f2  = cf2(p);
+        let rho = max(mix(f*f, f2*f2, u.field_mix) - u.iso_level*0.05, 0.0);
+        let hue = fract(f*1.5 + u.color_shift + u.time*u.speed*0.05);
+        let ec  = 0.5 + 0.5*cos(TAU*(hue + vec3<f32>(0.0, 0.333, 0.667)));
+        let op  = rho * dt * 3.5;
+        col      += ec * op * transmit * mix(vec3<f32>(1.0), u.crystal_color.xyz, 0.6);
+        transmit *= exp(-op * 2.5);
+        t += dt;
+    }
+    return col;
+}
+
+// ── Mode 6: quantum phase portrait ───────────────────────────────────────
+fn render_phase(uv: vec2<f32>) -> vec3<f32> {
+    let z   = u.time * u.speed * 0.12;
+    let p   = vec3<f32>(uv * 2.2 / u.zoom, z);
+    let f   = crystal_field(p);
+    let f2  = cf2(p);
+    let amp = sqrt(f*f + f2*f2);
+    let ang = atan2(f2, f);
+    let hue = fract(ang / TAU + u.color_shift + u.time*u.speed*0.02);
+    var col = 0.5 + 0.5*cos(TAU*(hue + vec3<f32>(0.0, 0.333, 0.667)));
+    // Saturate with amplitude — dark at vortex cores
+    col *= smoothstep(0.0, 0.3, amp) * 1.6;
+    // Phase-singularity glow (both fields near zero)
+    let core = 1.0 - smoothstep(0.0, 0.06, amp);
+    col += core * vec3<f32>(1.2, 1.3, 2.0);
+    // Fringe lines at ±f = 0 and ±f2 = 0
+    col += smoothstep(0.02, 0.0, abs(f))  * vec3<f32>(1.0, 0.9, 0.5) * 0.9;
+    col += smoothstep(0.02, 0.0, abs(f2)) * vec3<f32>(0.5, 0.9, 1.0) * 0.9;
+    // Background tint
+    col = mix(vec3<f32>(0.01, 0.005, 0.025), col, smoothstep(0.0, 0.15, amp));
+    return col;
+}
+
+// ── Mode 7: quantised Fermi stripes (DOS) ────────────────────────────────
+fn render_stripes(uv: vec2<f32>) -> vec3<f32> {
+    let p  = vec3<f32>(uv * 2.5 / u.zoom, u.time*u.speed*0.12);
+    let f  = crystal_field(p);
+    let f2 = cf2(p);
+    let fm = mix(f, f2, u.field_mix);
+
+    // Sharp equi-value contours — number controlled by iso_level
+    let n_lines  = 6.0 + u.iso_level * 14.0;
+    let stripe   = fract(fm * n_lines);
+    let line_w   = smoothstep(0.06, 0.0, min(stripe, 1.0 - stripe));
+
+    // Slow interference background
+    let interf = 0.5 + 0.5*sin(f*TAU*2.5 + f2*TAU*1.7 + u.time*u.speed*0.4);
+
+    let hue = fract(fm * 0.4 + u.color_shift + u.time*u.speed*0.04);
+    var col = 0.5 + 0.5*cos(TAU*(hue + vec3<f32>(0.0, 0.333, 0.667)));
+    col = mix(vec3<f32>(0.01,0.005,0.02),
+              col * mix(vec3<f32>(1.0), u.crystal_color.xyz, 0.55),
+              smoothstep(-0.7, 0.7, fm));
+    col += line_w * vec3<f32>(1.0, 0.95, 0.7) * 2.2;
+    col += interf * u.crystal_color.xyz * 0.07;
+    return col;
+}
+
+// ── Mode 8: gradient-warp lensing ────────────────────────────────────────
+fn render_warp(uv: vec2<f32>) -> vec3<f32> {
+    let z  = u.time * u.speed * 0.1;
+    let p0 = vec3<f32>(uv * 2.0 / u.zoom, z);
+    let e  = 0.035;
+    let gx = crystal_field(p0 + vec3<f32>(e, 0.0, 0.0))
+           - crystal_field(p0 - vec3<f32>(e, 0.0, 0.0));
+    let gy = crystal_field(p0 + vec3<f32>(0.0, e, 0.0))
+           - crystal_field(p0 - vec3<f32>(0.0, e, 0.0));
+
+    let warp   = (u.field_mix * 0.6 + 0.1);
+    let pw     = vec3<f32>((uv + vec2<f32>(gx, gy) * warp) * 2.0 / u.zoom, z);
+    let f      = crystal_field(pw);
+    let f2     = cf2(pw);
+
+    let hue = fract((f + f2)*0.5 + u.color_shift + u.time*u.speed*0.04);
+    var col = 0.5 + 0.5*cos(TAU*(hue + vec3<f32>(0.0, 0.333, 0.667)));
+    col = mix(vec3<f32>(0.01, 0.005, 0.02),
+              col * mix(vec3<f32>(1.0), u.crystal_color.xyz, 0.5),
+              smoothstep(-1.0, 1.0, f));
+    col += smoothstep(0.018, 0.0, abs(f))  * vec3<f32>(1.0, 0.9, 0.5) * 1.4;
+    col += smoothstep(0.022, 0.0, abs(f2)) * u.crystal_color.xyz * 1.2;
+    // Warp-magnitude glow at high-gradient regions
+    let grad_mag = sqrt(gx*gx + gy*gy);
+    col += grad_mag * u.crystal_color.xyz * 0.3;
+    return col;
+}
+
+// ── Mode 9: GLKITTY-style hollow sphere + crystal chain links ────────────
+fn smin_links(a: f32, b: f32, k: f32) -> f32 {
+    let h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * k * 0.25;
+}
+
+fn sd_link(p: vec3<f32>, le: f32, r1: f32, r2: f32) -> f32 {
+    // distance to one chain-link (opened torus capped at ±le)
+    let q = vec3<f32>(p.x, max(abs(p.y) - le, 0.0), p.z);
+    return length(vec2<f32>(length(q.xy) - r1, q.z)) - r2;
+}
+
+fn links_scene(p: vec3<f32>) -> f32 {
+    // crystal field drives subtle surface deformation (mask fades at radius)
+    let noise  = crystal_field(p * 0.85) * 0.10 * max(1.0 - length(p) * 0.9, 0.0);
+    let q      = p + noise;
+
+    // hollow sphere centred at origin
+    let sphere = abs(length(q) - 0.65) - 0.04;
+
+    // chain links: repeat along y, alternate 90° rotation each cell
+    let cell_sz = 1.1;
+    let cell_y  = floor(q.y / cell_sz + 0.5);
+    let lp      = vec3<f32>(q.x, q.y - cell_y * cell_sz, q.z);
+    var lq: vec3<f32>;
+    if (i32(cell_y) & 1) != 0 {
+        lq = vec3<f32>(lp.z, lp.y, lp.x);   // perpendicular link plane
+    } else {
+        lq = lp;
+    }
+    let link = sd_link(lq, 0.28, 0.22, 0.035);
+    return smin_links(sphere, link, 0.18);
+}
+
+fn links_normal(p: vec3<f32>) -> vec3<f32> {
+    let e = 0.003;
+    return normalize(vec3<f32>(
+        links_scene(p + vec3<f32>(e, 0.0, 0.0)) - links_scene(p - vec3<f32>(e, 0.0, 0.0)),
+        links_scene(p + vec3<f32>(0.0, e, 0.0)) - links_scene(p - vec3<f32>(0.0, e, 0.0)),
+        links_scene(p + vec3<f32>(0.0, 0.0, e)) - links_scene(p - vec3<f32>(0.0, 0.0, e)),
+    ));
+}
+
+fn render_links(uv: vec2<f32>) -> vec3<f32> {
+    let t  = u.time * u.speed;
+    var az = t * 0.22;
+    var el = 0.38;
+    if u.mouse_down >= 0.5 {
+        az = u.mouse.x * TAU;
+        el = (u.mouse.y - 0.5) * 2.2;
+    }
+    let cp  = vec3<f32>(sin(az)*cos(el), sin(el), cos(az)*cos(el)) * (3.2 / u.zoom);
+    let fwd = normalize(-cp);
+    let rgt = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), fwd));
+    let up  = cross(fwd, rgt);
+    let rd  = normalize(fwd + uv.x*rgt + uv.y*up);
+
+    // background: deep navy tinted by crystal field along ray direction
+    let bg_f = crystal_field(rd * 1.8);
+    var col  = mix(vec3<f32>(0.02, 0.01, 0.05),
+                   vec3<f32>(0.04, 0.12, 0.18),
+                   smoothstep(-0.6, 0.6, bg_f)) * 0.55;
+
+    var ray_t = 0.0;
+    for (var i = 0; i < 90; i++) {
+        let p = cp + rd * ray_t;
+        let d = links_scene(p);
+        if d < 0.003 {
+            let nm     = links_normal(p);
+            let cf_val = crystal_field(p);
+            let cf2v   = cf2(p);
+
+            // teal-cyan-purple palette keyed to crystal field + normal
+            let hue  = fract(cf_val * 1.4 + cf2v * 0.5 + u.color_shift + t * 0.04);
+            var surf = 0.5 + 0.5 * cos(TAU * (hue + vec3<f32>(0.0, 0.333, 0.667)));
+            surf = mix(surf, vec3<f32>(0.10, 0.72, 0.82), 0.38);   // teal bias
+            surf = mix(surf, u.crystal_color.xyz, 0.22);
+
+            let light = normalize(vec3<f32>(1.5, 2.0, 1.0));
+            let diff  = max(dot(nm, light), 0.0);
+            let rim   = pow(1.0 - abs(dot(nm, -rd)), 2.5);
+            let spec  = pow(max(dot(reflect(-light, nm), -rd), 0.0), 32.0);
+
+            col = surf * (0.3 + 0.7 * diff)
+                + rim  * vec3<f32>(0.3, 0.8, 1.0) * 0.65
+                + surf * spec * 0.50;
+            // subsurface crystal field glow (teal)
+            col += cf_val * cf_val * vec3<f32>(0.2, 0.8, 1.0) * 0.40;
+            // AO proxy via step count
+            col *= 0.35 + 0.65 * (1.0 - f32(i) / 90.0);
+            break;
+        }
+        if ray_t > 6.5 { break; }
+        ray_t += max(d, 0.003);
+    }
+    return col;
+}
+
 @fragment fn fs_field(f: VOut) -> @location(0) vec4<f32> {
     let uv = (f.uv*2.0 - 1.0) * vec2<f32>(u.aspect, 1.0);
     var col: vec3<f32>;
@@ -1414,7 +1619,12 @@ fn render_nodal(uv: vec2<f32>) -> vec3<f32> {
         case 1u { col = render_bz(uv); }
         case 2u { col = render_fermi(uv); }
         case 3u { col = render_density(uv); }
-        default { col = render_nodal(uv); }
+        case 4u { col = render_nodal(uv); }
+        case 5u { col = render_cloud(uv); }
+        case 6u { col = render_phase(uv); }
+        case 7u { col = render_stripes(uv); }
+        case 8u { col = render_warp(uv); }
+        default { col = render_links(uv); }
     }
     // vignette
     col *= 1.0 - 0.35*dot(f.uv*2.0-1.0, f.uv*2.0-1.0);
