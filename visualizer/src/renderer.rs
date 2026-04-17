@@ -1691,6 +1691,132 @@ fn render_xrd(uv: vec2<f32>) -> vec3<f32> {
     return col;
 }
 
+// ── Mode 11: 3-D reciprocal-lattice point cloud ───────────────────────────
+// Ray-casts a solid sphere for each G vector.  Depth is resolved per-ray
+// (frontmost sphere wins).  Glow halos add soft depth cues for occluded
+// points.  Origin is marked with a bright white sphere.
+// Controls:
+//   mouse drag  = orbit camera
+//   iso_level   = sphere size scale
+//   color_shift = palette rotation
+//   zoom        = camera distance
+fn render_recip3d(uv: vec2<f32>) -> vec3<f32> {
+    let t  = u.time * u.speed * 0.12;
+    var az = t;
+    var el = 0.30;
+    if u.mouse_down >= 0.5 {
+        az = u.mouse.x * TAU;
+        el = (u.mouse.y - 0.5) * 2.5;
+    }
+    let cp  = vec3<f32>(sin(az)*cos(el), sin(el), cos(az)*cos(el)) * (4.5 / u.zoom);
+    let fwd = normalize(-cp);
+    let rgt = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), fwd));
+    let up  = cross(fwd, rgt);
+    let rd  = normalize(fwd + uv.x*rgt + uv.y*up);
+
+    let G_scale  = 0.42;                          // reciprocal-space → world units
+    let base_r   = mix(0.025, 0.10, u.iso_level); // sphere radius range
+
+    var best_t   = 1e9;
+    var best_col = vec3<f32>(0.0);
+    var got_hit  = false;
+
+    // ── origin marker (bright white) ──────────────────────────────────────
+    {
+        let r   = base_r * 1.4;
+        let oc  = -cp;
+        let b   = dot(oc, rd);
+        let h   = b*b - dot(oc, oc) + r*r;
+        if h >= 0.0 {
+            let th = b - sqrt(h);
+            if th > 0.0 {
+                best_t   = th;
+                got_hit  = true;
+                let nm   = normalize(cp + rd*th);
+                let diff = max(dot(nm, normalize(vec3<f32>(1.0, 2.0, 1.5))), 0.0);
+                best_col = vec3<f32>(1.0, 0.97, 0.85) * (0.35 + 0.65*diff);
+            }
+        }
+    }
+
+    // ── G-vector spheres ──────────────────────────────────────────────────
+    for (var i = 0; i < 128; i++) {
+        if (i >= i32(u.num_g)) { break; }
+        let ga  = textureLoad(g_tex, vec2<i32>(i, 0), 0);
+        let amp = ga.w;
+        let G   = ga.xyz * u.kscale * G_scale;
+
+        let r   = base_r * (0.5 + amp);          // bigger sphere = stronger reflection
+        let oc  = G - cp;
+        let b   = dot(oc, rd);
+        let h   = b*b - dot(oc, oc) + r*r;
+        if h < 0.0 { continue; }
+        let th  = b - sqrt(h);
+        if th <= 0.0 || th >= best_t { continue; }
+
+        best_t  = th;
+        got_hit = true;
+
+        let p   = cp + rd * th;
+        let nm  = normalize(p - G);
+
+        let hue  = fract(amp*1.8 + length(G)*0.9 + u.color_shift + t*0.025);
+        var surf = 0.5 + 0.5 * cos(TAU * (hue + vec3<f32>(0.0, 0.333, 0.667)));
+        surf = mix(surf, u.crystal_color.xyz, 0.30);
+
+        let light = normalize(vec3<f32>(2.0, 3.0, 1.5));
+        let diff  = max(dot(nm, light), 0.0);
+        let spec  = pow(max(dot(reflect(-light, nm), -rd), 0.0), 28.0);
+        let rim   = pow(1.0 - abs(dot(nm, -rd)), 2.2);
+
+        best_col = surf * (0.25 + 0.75*diff)
+                 + rim  * vec3<f32>(0.4, 0.75, 1.0) * 0.35
+                 + spec * 0.55;
+        best_col *= (0.4 + 0.6*amp);             // dim weak reflections
+    }
+
+    var col = vec3<f32>(0.005, 0.003, 0.012);     // near-black bg
+    if got_hit { col = best_col; }
+
+    // ── glow halos — add soft depth cue for all G vectors ─────────────────
+    for (var i = 0; i < 128; i++) {
+        if (i >= i32(u.num_g)) { break; }
+        let ga    = textureLoad(g_tex, vec2<i32>(i, 0), 0);
+        let amp   = ga.w;
+        let G     = ga.xyz * u.kscale * G_scale;
+        let oc    = G - cp;
+        let proj  = dot(oc, rd);
+        if proj < 0.1 { continue; }
+        let cl    = cp + rd*proj;
+        let dist2 = dot(G - cl, G - cl);
+        let gr    = base_r * (0.8 + amp) * 2.5;  // halo wider than sphere
+        col += amp*amp * exp(-dist2 / (gr*gr)) * u.crystal_color.xyz * 0.12;
+    }
+
+    // ── faint spokes from origin to each G vector ─────────────────────────
+    for (var i = 0; i < 128; i++) {
+        if (i >= i32(u.num_g)) { break; }
+        let ga   = textureLoad(g_tex, vec2<i32>(i, 0), 0);
+        let amp  = ga.w;
+        let G    = ga.xyz * u.kscale * G_scale;
+        // closest distance from ray to the line segment origin→G
+        let oc   = -cp;
+        let ab   = G;
+        let ab2  = dot(ab, ab);
+        let s    = clamp(dot(rd, ab) / max(ab2, 0.0001), 0.0, 1.0);
+        // closest point on the line segment
+        let seg_pt = s * ab;
+        let ray_t2 = dot(seg_pt - cp, rd);
+        let ray_pt = cp + rd * max(ray_t2, 0.0);
+        let d2    = dot(seg_pt - ray_pt, seg_pt - ray_pt);
+        let spoke_w = 0.007 * amp;
+        col += amp * exp(-d2 / (spoke_w*spoke_w)) * 0.06
+             * mix(vec3<f32>(0.3,0.4,0.5), u.crystal_color.xyz, 0.5);
+    }
+
+    return col;
+}
+
 @fragment fn fs_field(f: VOut) -> @location(0) vec4<f32> {
     let uv = (f.uv*2.0 - 1.0) * vec2<f32>(u.aspect, 1.0);
     var col: vec3<f32>;
@@ -1705,13 +1831,14 @@ fn render_xrd(uv: vec2<f32>) -> vec3<f32> {
         case 7u  { col = render_stripes(uv); }
         case 8u  { col = render_warp(uv); }
         case 9u  { col = render_links(uv); }
-        default  { col = render_xrd(uv); }
+        case 10u { col = render_xrd(uv); }
+        default  { col = render_recip3d(uv); }
     }
-    // vignette (skip for XRD — it has its own detector boundary)
-    if u.mode != 10u {
+    // vignette — skip for XRD and RECIP3D (both have their own boundaries)
+    if u.mode != 10u && u.mode != 11u {
         col *= 1.0 - 0.35*dot(f.uv*2.0-1.0, f.uv*2.0-1.0);
     }
-    // tone-map (skip for XRD — preserves sharp diffraction spots)
+    // tone-map — skip for XRD (preserves sharp spots); RECIP3D uses it
     if u.mode != 10u {
         col = col / (col + vec3<f32>(0.6));
         col = pow(max(col, vec3<f32>(0.0)), vec3<f32>(0.85));
