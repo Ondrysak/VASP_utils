@@ -1611,26 +1611,111 @@ fn render_links(uv: vec2<f32>) -> vec3<f32> {
     return col;
 }
 
+// ── Mode 10: simulated X-ray diffraction pattern ─────────────────────────
+// Orthographic projection of reciprocal-lattice G vectors onto a virtual
+// detector.  Rotating crystal → single-crystal oscillation photograph.
+// Radial power  → Debye-Scherrer powder rings in the background.
+// Controls:
+//   mouse drag   = crystal orientation
+//   iso_level    = spot sharpness (high = sharper)
+//   field_mix    = single-crystal ↔ powder ring blend
+//   zoom         = detector scale
+//   color_shift  = palette shift
+fn render_xrd(uv: vec2<f32>) -> vec3<f32> {
+    let t  = u.time * u.speed * 0.06;
+    var az = t;
+    var el = 0.15;
+    if u.mouse_down >= 0.5 {
+        az = u.mouse.x * TAU;
+        el = (u.mouse.y - 0.5) * 2.0;
+    }
+    let ca = cos(az); let sa = sin(az);
+    let ce = cos(el); let se = sin(el);
+
+    let sc    = 0.75 / u.zoom;
+    // iso_level 0..1 → sigma 0.014..0.003
+    let sigma = max(0.014 - u.iso_level * 0.011, 0.003);
+    // Ewald-sphere thickness: how many G vectors "light up" at once
+    let ewald_k = 20.0 + u.iso_level * 60.0;
+
+    var spots  = 0.0;
+    var powder = 0.0;
+
+    for (var i = 0; i < 128; i++) {
+        if (i >= i32(u.num_g)) { break; }
+        let ga  = textureLoad(g_tex, vec2<i32>(i, 0), 0);
+        let amp = ga.w;
+        let G   = ga.xyz * u.kscale;
+
+        // rotate G with the crystal
+        let gx  = G.x*ca - G.z*sa;
+        let gyr = G.x*sa + G.z*ca;
+        let gy  = G.y*ce - gyr*se;
+        let gz  = G.y*se + gyr*ce;
+
+        // single-crystal spot: Ewald weighting when gz ≈ 0
+        let ew = exp(-gz*gz * ewald_k);
+        let sx = gx * sc;  let sy = gy * sc;
+        let d2 = (uv.x - sx)*(uv.x - sx) + (uv.y - sy)*(uv.y - sy);
+        spots += amp*amp * ew * exp(-d2 / (sigma*sigma));
+
+        // powder rings: intensity at radial distance |G|
+        let G_r = length(G) * sc;
+        let dr  = length(uv) - G_r;
+        powder += amp*amp * exp(-dr*dr * 28000.0);
+    }
+
+    // colors
+    let hue_shift = u.color_shift + t * 0.03;
+    let ring_col  = mix(vec3<f32>(0.55, 0.28, 0.04), u.crystal_color.xyz, 0.4);
+    let spot_col  = mix(vec3<f32>(0.82, 0.93, 1.00), u.crystal_color.xyz, 0.25);
+
+    var col = vec3<f32>(0.005, 0.003, 0.012);        // near-black film bg
+
+    // blend powder ↔ single-crystal via field_mix
+    col += powder * ring_col * mix(0.5, 0.0, u.field_mix);
+    col += spots  * spot_col * mix(0.4, 1.2, u.field_mix);
+
+    // colour the spots by crystal field at the G vector (hkl colour coding)
+    let cf_bg = crystal_field(vec3<f32>(uv * 2.0 / u.zoom, t * 0.2)) * 0.015;
+    col += cf_bg * u.crystal_color.xyz;
+
+    let r = length(uv);
+    // beam-stop: hard shadow for the central direct beam
+    col *= smoothstep(0.020, 0.036, r);
+    // faint transmitted-beam halo
+    col += exp(-r*r * 500.0) * vec3<f32>(1.0, 0.92, 0.70) * 0.25;
+    // circular detector boundary vignette
+    col *= 1.0 - smoothstep(0.80, 0.98, r / (1.0 / u.zoom));
+
+    return col;
+}
+
 @fragment fn fs_field(f: VOut) -> @location(0) vec4<f32> {
     let uv = (f.uv*2.0 - 1.0) * vec2<f32>(u.aspect, 1.0);
     var col: vec3<f32>;
     switch u.mode {
-        case 0u { col = render_rm(uv); }
-        case 1u { col = render_bz(uv); }
-        case 2u { col = render_fermi(uv); }
-        case 3u { col = render_density(uv); }
-        case 4u { col = render_nodal(uv); }
-        case 5u { col = render_cloud(uv); }
-        case 6u { col = render_phase(uv); }
-        case 7u { col = render_stripes(uv); }
-        case 8u { col = render_warp(uv); }
-        default { col = render_links(uv); }
+        case 0u  { col = render_rm(uv); }
+        case 1u  { col = render_bz(uv); }
+        case 2u  { col = render_fermi(uv); }
+        case 3u  { col = render_density(uv); }
+        case 4u  { col = render_nodal(uv); }
+        case 5u  { col = render_cloud(uv); }
+        case 6u  { col = render_phase(uv); }
+        case 7u  { col = render_stripes(uv); }
+        case 8u  { col = render_warp(uv); }
+        case 9u  { col = render_links(uv); }
+        default  { col = render_xrd(uv); }
     }
-    // vignette
-    col *= 1.0 - 0.35*dot(f.uv*2.0-1.0, f.uv*2.0-1.0);
-    // tone-map
-    col = col / (col + vec3<f32>(0.6));
-    col = pow(max(col, vec3<f32>(0.0)), vec3<f32>(0.85));
+    // vignette (skip for XRD — it has its own detector boundary)
+    if u.mode != 10u {
+        col *= 1.0 - 0.35*dot(f.uv*2.0-1.0, f.uv*2.0-1.0);
+    }
+    // tone-map (skip for XRD — preserves sharp diffraction spots)
+    if u.mode != 10u {
+        col = col / (col + vec3<f32>(0.6));
+        col = pow(max(col, vec3<f32>(0.0)), vec3<f32>(0.85));
+    }
     return vec4<f32>(col, 1.0);
 }
 "#;

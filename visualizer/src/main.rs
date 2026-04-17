@@ -49,7 +49,7 @@ impl Default for FieldParams {
     }
 }
 
-const MODE_NAMES: [&str; 10] = ["3D ISO", "BZ SLICE", "FERMI", "DENSITY", "NODAL", "CLOUD", "PHASE", "STRIPES", "WARP", "LINKS"];
+const MODE_NAMES: [&str; 11] = ["3D ISO", "BZ SLICE", "FERMI", "DENSITY", "NODAL", "CLOUD", "PHASE", "STRIPES", "WARP", "LINKS", "XRD"];
 
 // ── LFO ───────────────────────────────────────────────────────────────────
 
@@ -384,7 +384,7 @@ impl ApplicationHandler for App {
                     PhysicalKey::Code(KeyCode::Digit2) => gpu.set_supercell(2),
                     PhysicalKey::Code(KeyCode::Digit3) => gpu.set_supercell(3),
                     PhysicalKey::Code(KeyCode::KeyM) => {
-                        self.field_params.mode = (self.field_params.mode + 1) % 10;
+                        self.field_params.mode = (self.field_params.mode + 1) % 11;
                     }
                     PhysicalKey::Code(KeyCode::KeyK) => {
                         if let Some(kp) = &gpu.kpath {
