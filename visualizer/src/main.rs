@@ -3,6 +3,7 @@ mod camera;
 mod crystals;
 mod kpoints;
 mod mesh;
+mod modes;
 mod poscar;
 mod reciprocal;
 mod renderer;
@@ -49,7 +50,12 @@ impl Default for FieldParams {
     }
 }
 
-const MODE_NAMES: [&str; 13] = ["3D ISO", "BZ SLICE", "FERMI", "DENSITY", "NODAL", "CLOUD", "PHASE", "STRIPES", "WARP", "LINKS", "XRD", "RECIP", "NONEUC"];
+const MODE_NAMES: [&str; 21] = [
+    "3D ISO", "BZ SLICE", "FERMI", "DENSITY", "NODAL", "CLOUD", "PHASE",
+    "STRIPES", "WARP", "LINKS", "XRD", "RECIP", "NONEUC",
+    "PHONON", "MOIRE", "EWALD", "WANNIER", "MAGNETIC", "DISPERSION",
+    "KIKUCHI", "DEFECT",
+];
 
 // ── LFO ───────────────────────────────────────────────────────────────────
 
